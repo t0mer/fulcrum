@@ -100,14 +100,16 @@ func run() error {
 	})
 
 	apiSvc := api.New(api.Deps{
-		Store:         st,
-		Enroll:        enrollSvc,
-		Provider:      provider,
-		ProviderName:  cfg.Provider.Name,
-		Notifier:      pool,
-		WebhookSecret: cfg.Server.WebhookSecret,
-		Metrics:       m,
-		Logger:        logger,
+		Store:            st,
+		Enroll:           enrollSvc,
+		Provider:         provider,
+		ProviderName:     cfg.Provider.Name,
+		Notifier:         pool,
+		WebhookSecret:    cfg.Server.WebhookSecret,
+		Metrics:          m,
+		Logger:           logger,
+		DefaultThreshold: cfg.Match.DefaultThreshold,
+		DefaultSinkMode:  cfg.Sink.Mode,
 	})
 
 	handler := server.New(server.Options{

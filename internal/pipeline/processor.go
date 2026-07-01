@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/t0mer/fulcrum/internal/match"
@@ -60,8 +61,29 @@ func New(st *store.Store, dl Downloader, det Detector, fwd *sink.Forward, cfg Co
 	}
 }
 
-func (p *Processor) storeEnabled() bool   { return p.cfg.SinkMode != "forward-only" }
-func (p *Processor) forwardEnabled() bool { return p.cfg.SinkMode != "storage-only" }
+// effectiveSinkMode / effectiveThreshold prefer the runtime setting (adjustable
+// from the Settings page) and fall back to the startup config.
+func (p *Processor) effectiveSinkMode() string {
+	if v, ok, _ := p.store.GetSetting(store.SettingSinkMode); ok {
+		switch v {
+		case "storage-only", "forward-only", "both":
+			return v
+		}
+	}
+	return p.cfg.SinkMode
+}
+
+func (p *Processor) effectiveThreshold() float64 {
+	if v, ok, _ := p.store.GetSetting(store.SettingGlobalThreshold); ok {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 && f < 1 {
+			return f
+		}
+	}
+	return p.cfg.DefaultThreshold
+}
+
+func storeEnabled(mode string) bool   { return mode != "forward-only" }
+func forwardEnabled(mode string) bool { return mode != "storage-only" }
 
 // Process runs the pipeline for one job.
 func (p *Processor) Process(ctx context.Context, job store.Job) error {
@@ -110,9 +132,10 @@ func (p *Processor) Process(ctx context.Context, job store.Job) error {
 
 	// Best similarity per subject across all detected faces (one image can
 	// match several kids, but each kid at most once).
+	gt := p.effectiveThreshold()
 	bestPerSubject := map[int64]float64{}
 	for _, f := range faces {
-		res, ok := match.Best(f.Embedding, refs, p.thresholdFor(subjects))
+		res, ok := match.Best(f.Embedding, refs, thresholdFor(subjects, gt))
 		if !ok {
 			continue
 		}
@@ -124,18 +147,19 @@ func (p *Processor) Process(ctx context.Context, job store.Job) error {
 		return nil // no match; media discarded
 	}
 
+	mode := p.effectiveSinkMode()
 	for subjectID, sim := range bestPerSubject {
 		sub := subjects[subjectID]
-		if err := p.deliver(ctx, job, sub, sim, data, mime); err != nil {
+		if err := p.deliver(ctx, job, sub, sim, data, mime, mode); err != nil {
 			p.log.Error("deliver match", "subject", sub.Slug, "err", err)
 		}
 	}
 	return nil
 }
 
-func (p *Processor) deliver(ctx context.Context, job store.Job, sub store.Subject, sim float64, data []byte, mime string) error {
+func (p *Processor) deliver(ctx context.Context, job store.Job, sub store.Subject, sim float64, data []byte, mime, mode string) error {
 	var storedPath string
-	if p.storeEnabled() {
+	if storeEnabled(mode) {
 		path, err := p.fs.Save(sub.Slug, job.MessageID, data, mime, time.Time{})
 		if err != nil {
 			p.sinkError("fs")
@@ -157,7 +181,7 @@ func (p *Processor) deliver(ctx context.Context, job store.Job, sub store.Subjec
 	}
 	p.incMatch(sub.Slug)
 
-	if p.forwardEnabled() && p.forward != nil {
+	if forwardEnabled(mode) && p.forward != nil {
 		caption := p.caption(sub.Name, sim, job.ProviderGroupID)
 		if err := p.forward.Send(ctx, data, mime, caption); err != nil {
 			p.sinkError("whatsapp")
@@ -198,12 +222,12 @@ func (p *Processor) loadReferences() ([]match.Reference, map[int64]store.Subject
 	return refs, byID, nil
 }
 
-func (p *Processor) thresholdFor(subjects map[int64]store.Subject) func(int64) float64 {
+func thresholdFor(subjects map[int64]store.Subject, global float64) func(int64) float64 {
 	return func(id int64) float64 {
 		if s, ok := subjects[id]; ok && s.Threshold != nil {
 			return *s.Threshold
 		}
-		return p.cfg.DefaultThreshold
+		return global
 	}
 }
 

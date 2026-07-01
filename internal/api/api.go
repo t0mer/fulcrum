@@ -30,18 +30,23 @@ type Deps struct {
 	WebhookSecret string
 	Metrics       *metrics.Metrics
 	Logger        *slog.Logger
+	// Config fallbacks surfaced by the settings API when no override is stored.
+	DefaultThreshold float64
+	DefaultSinkMode  string
 }
 
 // API holds handler dependencies.
 type API struct {
-	store    *store.Store
-	enroll   *enroll.Service
-	provider whatsapp.Provider
-	provName string
-	notifier Notifier
-	secret   string
-	metrics  *metrics.Metrics
-	log      *slog.Logger
+	store            *store.Store
+	enroll           *enroll.Service
+	provider         whatsapp.Provider
+	provName         string
+	notifier         Notifier
+	secret           string
+	metrics          *metrics.Metrics
+	defaultThreshold float64
+	defaultSinkMode  string
+	log              *slog.Logger
 }
 
 // New constructs the API handler set.
@@ -50,10 +55,15 @@ func New(d Deps) *API {
 	if log == nil {
 		log = slog.Default()
 	}
+	sinkMode := d.DefaultSinkMode
+	if sinkMode == "" {
+		sinkMode = "both"
+	}
 	return &API{
 		store: d.Store, enroll: d.Enroll, provider: d.Provider,
 		provName: d.ProviderName, notifier: d.Notifier, secret: d.WebhookSecret,
-		metrics: d.Metrics, log: log,
+		metrics: d.Metrics, defaultThreshold: d.DefaultThreshold, defaultSinkMode: sinkMode,
+		log: log,
 	}
 }
 
@@ -85,6 +95,8 @@ func (a *API) Routes() http.Handler {
 	})
 	r.Get("/provider", a.getProvider)
 	r.Post("/provider/test", a.testProvider)
+	r.Get("/settings", a.getSettings)
+	r.Put("/settings", a.updateSettings)
 	return r
 }
 

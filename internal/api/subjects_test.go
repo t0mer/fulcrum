@@ -30,7 +30,7 @@ func newTestAPI(t *testing.T, det enroll.Detector) http.Handler {
 	}
 	t.Cleanup(func() { st.Close() })
 	svc := enroll.New(st, det, filepath.Join(t.TempDir(), "faces"))
-	return New(st, svc, nil).Routes()
+	return New(Deps{Store: st, Enroll: svc}).Routes()
 }
 
 func do(t *testing.T, h http.Handler, method, path, body string) *httptest.ResponseRecorder {

@@ -28,6 +28,8 @@ type Options struct {
 	SPA fs.FS
 	// API is mounted under /api; nil disables the REST API.
 	API http.Handler
+	// Webhook handles POST /webhook/{provider}; nil disables intake.
+	Webhook http.Handler
 	// Ready is consulted by /readyz; nil means always ready.
 	Ready ReadyFunc
 }
@@ -67,7 +69,9 @@ func New(opts Options) http.Handler {
 		r.Mount("/api", opts.API)
 	}
 
-	// TODO(milestone-4+): /webhook/{provider} mounts here.
+	if opts.Webhook != nil {
+		r.Method(http.MethodPost, "/webhook/{provider}", opts.Webhook)
+	}
 
 	if opts.SPA != nil {
 		r.NotFound(spaHandler(opts.SPA))

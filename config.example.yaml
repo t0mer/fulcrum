@@ -10,7 +10,10 @@ db_path: /data/fulcrum.db
 server:
   port: 8080
   log_level: info          # debug | info | warning | error
-  webhook_secret: ""       # verifies inbound webhooks; set via FULCRUM_SERVER_WEBHOOK_SECRET
+  # Strongly recommended: verifies inbound webhooks via the X-Webhook-Secret
+  # header. Leave empty only for first-run bootstrap on a trusted network — an
+  # open webhook lets anyone enqueue provider-supplied media URLs to fetch.
+  webhook_secret: ""       # set via FULCRUM_SERVER_WEBHOOK_SECRET
 
 provider:
   name: gowa               # gowa | greenapi | wwebjs

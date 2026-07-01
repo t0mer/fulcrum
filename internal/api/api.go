@@ -1,4 +1,5 @@
-// Package api implements the chi REST handlers backing the SPA.
+// Package api implements the chi REST handlers backing the SPA and the inbound
+// webhook intake.
 package api
 
 import (
@@ -11,22 +12,49 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/t0mer/fulcrum/internal/enroll"
+	"github.com/t0mer/fulcrum/internal/metrics"
 	"github.com/t0mer/fulcrum/internal/store"
+	"github.com/t0mer/fulcrum/internal/whatsapp"
 )
+
+// Notifier is woken when new work is enqueued.
+type Notifier interface{ Notify() }
+
+// Deps are the API's collaborators.
+type Deps struct {
+	Store         *store.Store
+	Enroll        *enroll.Service
+	Provider      whatsapp.Provider
+	ProviderName  string
+	Notifier      Notifier
+	WebhookSecret string
+	Metrics       *metrics.Metrics
+	Logger        *slog.Logger
+}
 
 // API holds handler dependencies.
 type API struct {
-	store  *store.Store
-	enroll *enroll.Service
-	log    *slog.Logger
+	store    *store.Store
+	enroll   *enroll.Service
+	provider whatsapp.Provider
+	provName string
+	notifier Notifier
+	secret   string
+	metrics  *metrics.Metrics
+	log      *slog.Logger
 }
 
 // New constructs the API handler set.
-func New(st *store.Store, en *enroll.Service, log *slog.Logger) *API {
+func New(d Deps) *API {
+	log := d.Logger
 	if log == nil {
 		log = slog.Default()
 	}
-	return &API{store: st, enroll: en, log: log}
+	return &API{
+		store: d.Store, enroll: d.Enroll, provider: d.Provider,
+		provName: d.ProviderName, notifier: d.Notifier, secret: d.WebhookSecret,
+		metrics: d.Metrics, log: log,
+	}
 }
 
 // Routes returns the router to mount under /api.
@@ -46,7 +74,23 @@ func (a *API) Routes() http.Handler {
 			r.Post("/reembed", a.reembedSubject)
 		})
 	})
+	r.Route("/groups", func(r chi.Router) {
+		r.Get("/", a.listGroups)
+		r.Patch("/{id}", a.updateGroup)
+	})
+	r.Route("/matches", func(r chi.Router) {
+		r.Get("/", a.listMatches)
+		r.Get("/{id}/image", a.getMatchImage)
+		r.Post("/{id}/review", a.reviewMatch)
+	})
+	r.Get("/provider", a.getProvider)
+	r.Post("/provider/test", a.testProvider)
 	return r
+}
+
+// WebhookHandler handles POST /webhook/{provider} at the server root.
+func (a *API) WebhookHandler() http.Handler {
+	return http.HandlerFunc(a.webhook)
 }
 
 func writeJSON(w http.ResponseWriter, code int, body any) {

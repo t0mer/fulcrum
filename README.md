@@ -81,7 +81,8 @@ not baked into the image).
 1. Gateway delivers a webhook → normalized to an `InboundMessage`.
 2. Dropped unless it's an **image** from a **monitored** group.
 3. A durable job is enqueued; the webhook returns immediately.
-4. A worker downloads the media, dedups by SHA-256, and calls `/detect`.
+4. A worker downloads the media, dedups by SHA-256 and perceptual hash
+   (near-identical re-encodes are skipped), and calls `/detect`.
 5. Each detected face is matched (cosine) against enrolled references, using the
    per-subject threshold or the global default.
 6. On a match: save to `matches/{slug}/{YYYY}/{MM}/…` and/or forward to the
@@ -127,6 +128,7 @@ variables use the `FULCRUM_` prefix with `.` → `_` (e.g. `server.port` →
 | Provider token | — | `FULCRUM_PROVIDER_TOKEN` | — |
 | ML sidecar URL | `--ml.url` | `FULCRUM_ML_URL` | `http://fulcrum-ml:8081` |
 | Global threshold | — | `FULCRUM_MATCH_DEFAULT_THRESHOLD` | `0.48` |
+| Near-dup distance | — | `FULCRUM_MATCH_NEAR_DUP_DISTANCE` | `4` (0 disables) |
 | Faces path | — | `FULCRUM_ENROLL_FACES_PATH` | `/data/faces` |
 | Workers | `--queue.workers` | `FULCRUM_QUEUE_WORKERS` | `2` |
 | Max attempts | — | `FULCRUM_QUEUE_MAX_ATTEMPTS` | `5` |

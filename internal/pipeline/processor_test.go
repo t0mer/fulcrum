@@ -1,7 +1,12 @@
 package pipeline
 
 import (
+	"bytes"
 	"context"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"image/png"
 	"path/filepath"
 	"testing"
 
@@ -129,6 +134,68 @@ func TestPipelineDedupSkipsSecondTime(t *testing.T) {
 	_ = proc.Process(context.Background(), job())
 	if matches, _ := st.ListMatches(store.MatchFilter{}); len(matches) != 1 {
 		t.Errorf("matches = %d, want 1 (dedup)", len(matches))
+	}
+}
+
+// seqDownloader returns a different payload on each call.
+type seqDownloader struct {
+	payloads [][]byte
+	i        int
+}
+
+func (d *seqDownloader) DownloadMedia(context.Context, whatsapp.InboundMessage) ([]byte, string, error) {
+	p := d.payloads[d.i%len(d.payloads)]
+	d.i++
+	return p, "image/jpeg", nil
+}
+
+func testImage() image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, 48, 48))
+	for y := 0; y < 48; y++ {
+		for x := 0; x < 48; x++ {
+			img.Set(x, y, color.RGBA{uint8(x * 5), uint8(y * 5), 90, 255})
+		}
+	}
+	return img
+}
+
+func TestPipelineSkipsPerceptualNearDuplicate(t *testing.T) {
+	img := testImage()
+	var pngBuf, jpgBuf bytes.Buffer
+	_ = png.Encode(&pngBuf, img)
+	_ = jpeg.Encode(&jpgBuf, img, &jpeg.Options{Quality: 88})
+
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "t.db"))
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	emb := []float32{1, 0, 0}
+	sub, _ := st.CreateSubject("Yael", "yael", nil)
+	st.AddFace(sub.ID, emb, "/f.jpg")
+
+	proc := New(st,
+		&seqDownloader{payloads: [][]byte{pngBuf.Bytes(), jpgBuf.Bytes()}},
+		&fakeDetector{faces: []ml.Face{{Embedding: emb, DetScore: 0.99}}},
+		&sink.Forward{Sender: &fakeSender{}},
+		Config{DefaultThreshold: 0.5, SinkMode: "storage-only", StoragePath: filepath.Join(dir, "m"), NearDupDistance: 4},
+		nil, nil)
+
+	// Two jobs, different message ids and different encodings of the same image.
+	j1 := store.Job{ID: 1, ProviderGroupID: "g@g.us", MessageID: "M1", MediaRef: "r1"}
+	j2 := store.Job{ID: 2, ProviderGroupID: "g@g.us", MessageID: "M2", MediaRef: "r2"}
+	if err := proc.Process(context.Background(), j1); err != nil {
+		t.Fatalf("job1: %v", err)
+	}
+	if err := proc.Process(context.Background(), j2); err != nil {
+		t.Fatalf("job2: %v", err)
+	}
+
+	matches, _ := st.ListMatches(store.MatchFilter{})
+	if len(matches) != 1 {
+		t.Fatalf("matches = %d, want 1 (near-duplicate skipped)", len(matches))
 	}
 }
 

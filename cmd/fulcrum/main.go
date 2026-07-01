@@ -166,6 +166,7 @@ func (p *program) daemon(ctx context.Context) error {
 			DefaultThreshold: cfg.Match.DefaultThreshold,
 			SinkMode:         cfg.Sink.Mode,
 			StoragePath:      cfg.Sink.StoragePath,
+			NearDupDistance:  cfg.Match.NearDupDistance,
 		}, m, logger)
 	pool := queue.New(st, proc, queue.Options{
 		Workers:     cfg.Queue.Workers,

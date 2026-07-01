@@ -15,6 +15,7 @@ import (
 	"github.com/t0mer/fulcrum/internal/match"
 	"github.com/t0mer/fulcrum/internal/metrics"
 	"github.com/t0mer/fulcrum/internal/ml"
+	"github.com/t0mer/fulcrum/internal/phash"
 	"github.com/t0mer/fulcrum/internal/sink"
 	"github.com/t0mer/fulcrum/internal/store"
 	"github.com/t0mer/fulcrum/internal/whatsapp"
@@ -35,6 +36,8 @@ type Config struct {
 	DefaultThreshold float64
 	SinkMode         string // storage-only | forward-only | both
 	StoragePath      string
+	// NearDupDistance is the max dHash distance for perceptual dedup; 0 disables it.
+	NearDupDistance int
 }
 
 // Processor is the queue Handler for image jobs.
@@ -109,6 +112,21 @@ func (p *Processor) Process(ctx context.Context, job store.Job) error {
 	if !fresh {
 		p.log.Debug("duplicate media, skipping", "message_id", job.MessageID)
 		return nil
+	}
+
+	// Perceptual dedup: skip near-identical re-encodes of an image we've
+	// already processed. Best-effort — a decode failure just falls through.
+	if p.cfg.NearDupDistance > 0 {
+		if h, herr := phash.Compute(data); herr == nil {
+			freshImg, serr := p.store.SeenSimilarImage(h, p.cfg.NearDupDistance)
+			if serr != nil {
+				return serr
+			}
+			if !freshImg {
+				p.log.Debug("near-duplicate media, skipping", "message_id", job.MessageID)
+				return nil
+			}
+		}
 	}
 
 	p.incImagesProcessed()

@@ -49,6 +49,9 @@ type MLConfig struct {
 // MatchConfig holds cosine-matching thresholds.
 type MatchConfig struct {
 	DefaultThreshold float64 `mapstructure:"default_threshold"`
+	// NearDupDistance is the max dHash Hamming distance to treat two images as
+	// the same and skip reprocessing. 0 disables perceptual dedup.
+	NearDupDistance int `mapstructure:"near_dup_distance"`
 }
 
 // EnrollConfig holds enrollment (reference photo) settings.
@@ -128,6 +131,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("ml.url", "http://fulcrum-ml:8081")
 	v.SetDefault("ml.det_score", 0.5)
 	v.SetDefault("match.default_threshold", 0.48)
+	v.SetDefault("match.near_dup_distance", 4)
 	v.SetDefault("enroll.faces_path", "/data/faces")
 	v.SetDefault("queue.workers", 2)
 	v.SetDefault("queue.max_attempts", 5)

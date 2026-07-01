@@ -26,6 +26,7 @@ ml:
 
 match:
   default_threshold: 0.48  # cosine; tune per-subject on real group photos
+  near_dup_distance: 4     # max dHash distance to treat images as the same; 0 disables
 
 enroll:
   faces_path: /data/faces  # per-kid reference photos: {faces_path}/{slug}/

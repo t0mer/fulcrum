@@ -16,14 +16,22 @@ targets=(
   "linux/amd64"
   "linux/arm64"
   "linux/arm/7"
+  "linux/arm/6"
+  "linux/386"
+  "darwin/amd64"
+  "darwin/arm64"
+  "windows/amd64"
+  "windows/arm64"
 )
 
 for t in "${targets[@]}"; do
   IFS=/ read -r GOOS GOARCH GOARM <<<"$t"
   name="fulcrum_${GOOS}_${GOARCH}${GOARM:+v$GOARM}"
+  ext=""
+  [ "$GOOS" = "windows" ] && ext=".exe"
   echo "building $name (version $VERSION)"
   CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" GOARM="${GOARM:-}" \
-    go build -trimpath -ldflags "$LDFLAGS" -o "$OUT/$name" ./cmd/fulcrum
+    go build -trimpath -ldflags "$LDFLAGS" -o "$OUT/$name$ext" ./cmd/fulcrum
 done
 
 echo "done -> $OUT/"

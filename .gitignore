@@ -56,6 +56,21 @@ npm-debug.log*
 *.sqlite
 *.sqlite3
 
+# Python (fulcrum-ml sidecar)
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+models/
+
 # Editor / OS
 .idea/
 .vscode/

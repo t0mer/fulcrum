@@ -30,7 +30,10 @@ type Config struct {
 type ServerConfig struct {
 	Port          int    `mapstructure:"port"`
 	WebhookSecret string `mapstructure:"webhook_secret"`
-	LogLevel      string `mapstructure:"log_level"`
+	// AuthToken gates the /api surface. Empty = open (bootstrap). When set,
+	// callers present it via X-API-Token or HTTP Basic Auth (password).
+	AuthToken string `mapstructure:"auth_token"`
+	LogLevel  string `mapstructure:"log_level"`
 }
 
 // ProviderConfig selects and configures the active WhatsApp gateway adapter.
@@ -124,6 +127,7 @@ func setDefaults(v *viper.Viper) {
 	// through Unmarshal — otherwise env vars for keys without a default (e.g.
 	// FULCRUM_SERVER_WEBHOOK_SECRET, FULCRUM_PROVIDER_TOKEN) are silently ignored.
 	v.SetDefault("server.webhook_secret", "")
+	v.SetDefault("server.auth_token", "")
 	v.SetDefault("db_path", "/data/fulcrum.db")
 	v.SetDefault("provider.name", "gowa")
 	v.SetDefault("provider.base_url", "")

@@ -130,17 +130,22 @@ func (p *Processor) Process(ctx context.Context, job store.Job) error {
 		return nil // no enrolled subjects yet
 	}
 
-	// Best similarity per subject across all detected faces (one image can
-	// match several kids, but each kid at most once).
+	// Best-scoring face per subject across all detected faces (one image can
+	// match several kids, but each kid at most once). We keep the winning
+	// face's embedding so a confirmed match can reinforce the references.
 	gt := p.effectiveThreshold()
-	bestPerSubject := map[int64]float64{}
+	type hit struct {
+		sim float64
+		emb []float32
+	}
+	bestPerSubject := map[int64]hit{}
 	for _, f := range faces {
 		res, ok := match.Best(f.Embedding, refs, thresholdFor(subjects, gt))
 		if !ok {
 			continue
 		}
-		if cur, seen := bestPerSubject[res.SubjectID]; !seen || res.Similarity > cur {
-			bestPerSubject[res.SubjectID] = res.Similarity
+		if cur, seen := bestPerSubject[res.SubjectID]; !seen || res.Similarity > cur.sim {
+			bestPerSubject[res.SubjectID] = hit{sim: res.Similarity, emb: f.Embedding}
 		}
 	}
 	if len(bestPerSubject) == 0 {
@@ -148,16 +153,16 @@ func (p *Processor) Process(ctx context.Context, job store.Job) error {
 	}
 
 	mode := p.effectiveSinkMode()
-	for subjectID, sim := range bestPerSubject {
+	for subjectID, h := range bestPerSubject {
 		sub := subjects[subjectID]
-		if err := p.deliver(ctx, job, sub, sim, data, mime, mode); err != nil {
+		if err := p.deliver(ctx, job, sub, h.sim, h.emb, data, mime, mode); err != nil {
 			p.log.Error("deliver match", "subject", sub.Slug, "err", err)
 		}
 	}
 	return nil
 }
 
-func (p *Processor) deliver(ctx context.Context, job store.Job, sub store.Subject, sim float64, data []byte, mime, mode string) error {
+func (p *Processor) deliver(ctx context.Context, job store.Job, sub store.Subject, sim float64, emb []float32, data []byte, mime, mode string) error {
 	var storedPath string
 	if storeEnabled(mode) {
 		path, err := p.fs.Save(sub.Slug, job.MessageID, data, mime, time.Time{})
@@ -175,6 +180,7 @@ func (p *Processor) deliver(ctx context.Context, job store.Job, sub store.Subjec
 		Similarity:    sim,
 		SourceGroupID: job.ProviderGroupID,
 		StoredPath:    storedPath,
+		Embedding:     emb,
 	})
 	if err != nil {
 		return err

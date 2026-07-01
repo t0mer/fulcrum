@@ -61,10 +61,15 @@ func (a *API) getMatchImage(w http.ResponseWriter, r *http.Request) {
 
 type reviewReq struct {
 	Decision string `json:"decision"` // confirm | reject
+	// Reinforce (confirm only) adds the matched face to the subject's
+	// references. Defaults to true; pass false to just confirm.
+	Reinforce *bool `json:"reinforce"`
 }
 
-// reviewMatch confirms or rejects a match. Rejecting deletes the stored file
-// (§11): a false positive should not linger on disk.
+// reviewMatch confirms or rejects a match (active learning, §11). Confirming
+// optionally reinforces the subject's references with the matched face;
+// rejecting deletes the stored file and records the embedding as a
+// hard-negative for threshold tuning.
 func (a *API) reviewMatch(w http.ResponseWriter, r *http.Request) {
 	id, ok := a.pathID(w, r, "id")
 	if !ok {
@@ -75,13 +80,7 @@ func (a *API) reviewMatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	var status string
-	switch req.Decision {
-	case "confirm":
-		status = "confirmed"
-	case "reject":
-		status = "rejected"
-	default:
+	if req.Decision != "confirm" && req.Decision != "reject" {
 		writeError(w, http.StatusBadRequest, "decision must be confirm or reject")
 		return
 	}
@@ -91,14 +90,40 @@ func (a *API) reviewMatch(w http.ResponseWriter, r *http.Request) {
 		a.respondLookup(w, err)
 		return
 	}
-	if err := a.store.SetReviewed(id, status); err != nil {
+
+	if req.Decision == "reject" {
+		if err := a.store.SetReviewed(id, "rejected"); err != nil {
+			a.respondLookup(w, err)
+			return
+		}
+		if err := a.store.RecordHardNegative(m.SubjectID, m.Embedding, m.Similarity); err != nil {
+			a.log.Warn("record hard negative", "err", err)
+		}
+		if m.StoredPath != "" {
+			if err := os.Remove(m.StoredPath); err != nil && !os.IsNotExist(err) {
+				a.log.Warn("removing rejected match file", "path", m.StoredPath, "err", err)
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"reviewed": "rejected"})
+		return
+	}
+
+	// confirm
+	if err := a.store.SetReviewed(id, "confirmed"); err != nil {
 		a.respondLookup(w, err)
 		return
 	}
-	if status == "rejected" && m.StoredPath != "" {
-		if err := os.Remove(m.StoredPath); err != nil && !os.IsNotExist(err) {
-			a.log.Warn("removing rejected match file", "path", m.StoredPath, "err", err)
+	reinforced := false
+	wantReinforce := req.Reinforce == nil || *req.Reinforce
+	if wantReinforce && a.enroll != nil && m.StoredPath != "" && len(m.Embedding) > 0 {
+		sub, err := a.store.GetSubject(m.SubjectID)
+		if err == nil {
+			if _, err := a.enroll.Reinforce(sub, m.Embedding, m.StoredPath); err != nil {
+				a.log.Warn("reinforce from match", "err", err)
+			} else {
+				reinforced = true
+			}
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"reviewed": status})
+	writeJSON(w, http.StatusOK, map[string]any{"reviewed": "confirmed", "reinforced": reinforced})
 }

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/t0mer/fulcrum/internal/match"
 	"github.com/t0mer/fulcrum/internal/store"
 )
 
@@ -57,6 +58,25 @@ func (a *API) getMatchImage(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "private, max-age=86400")
 	http.ServeContent(w, r, filepath.Base(m.StoredPath), info.ModTime(), f)
+}
+
+// tuning returns a subject's review history and a suggested threshold.
+func (a *API) tuning(w http.ResponseWriter, r *http.Request) {
+	id, ok := a.pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	if _, err := a.store.GetSubject(id); err != nil {
+		a.respondLookup(w, err)
+		return
+	}
+	stats, err := a.store.TuningStatsFor(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	suggestion := match.SuggestThreshold(stats.MinConfirmed, stats.MaxRejected, stats.ConfirmedCount, stats.RejectedCount)
+	writeJSON(w, http.StatusOK, map[string]any{"stats": stats, "suggestion": suggestion})
 }
 
 type reviewReq struct {

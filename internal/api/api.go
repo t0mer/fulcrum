@@ -86,6 +86,7 @@ func (a *API) Routes() http.Handler {
 			r.Get("/faces/{faceID}/image", a.getFaceImage)
 			r.Delete("/faces/{faceID}", a.deleteFace)
 			r.Post("/reembed", a.reembedSubject)
+			r.Get("/tuning", a.tuning)
 		})
 	})
 	r.Route("/groups", func(r chi.Router) {

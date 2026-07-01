@@ -60,6 +60,29 @@ func TestPrecedenceEnvOverDefault(t *testing.T) {
 	}
 }
 
+func TestEnvBindsSecretAndProviderCreds(t *testing.T) {
+	// These keys have no meaningful default; they must still bind from env
+	// (regression guard for the Viper AutomaticEnv + Unmarshal gotcha).
+	cfg, err := loadWith(t, nil, map[string]string{
+		"FULCRUM_SERVER_WEBHOOK_SECRET":     "s3cr3t",
+		"FULCRUM_PROVIDER_BASE_URL":         "http://gw:3000",
+		"FULCRUM_PROVIDER_TOKEN":            "user:pass",
+		"FULCRUM_SINK_DESTINATION_GROUP_ID": "123@g.us",
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Server.WebhookSecret != "s3cr3t" {
+		t.Errorf("webhook_secret = %q, want s3cr3t", cfg.Server.WebhookSecret)
+	}
+	if cfg.Provider.BaseURL != "http://gw:3000" || cfg.Provider.Token != "user:pass" {
+		t.Errorf("provider creds not bound: %+v", cfg.Provider)
+	}
+	if cfg.Sink.DestinationGroupID != "123@g.us" {
+		t.Errorf("destination_group_id = %q", cfg.Sink.DestinationGroupID)
+	}
+}
+
 func TestValidateRejectsBadProvider(t *testing.T) {
 	_, err := loadWith(t, nil, map[string]string{"FULCRUM_PROVIDER_NAME": "nope"})
 	if err == nil {

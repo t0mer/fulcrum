@@ -117,8 +117,14 @@ func Load(fs *pflag.FlagSet) (*Config, error) {
 func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("server.log_level", "info")
+	// Every key needs a default (even empty) so Viper's AutomaticEnv binds it
+	// through Unmarshal — otherwise env vars for keys without a default (e.g.
+	// FULCRUM_SERVER_WEBHOOK_SECRET, FULCRUM_PROVIDER_TOKEN) are silently ignored.
+	v.SetDefault("server.webhook_secret", "")
 	v.SetDefault("db_path", "/data/fulcrum.db")
 	v.SetDefault("provider.name", "gowa")
+	v.SetDefault("provider.base_url", "")
+	v.SetDefault("provider.token", "")
 	v.SetDefault("ml.url", "http://fulcrum-ml:8081")
 	v.SetDefault("ml.det_score", 0.5)
 	v.SetDefault("match.default_threshold", 0.48)
@@ -127,6 +133,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("queue.max_attempts", 5)
 	v.SetDefault("sink.mode", "both")
 	v.SetDefault("sink.storage_path", "/data/matches")
+	v.SetDefault("sink.destination_group_id", "")
 }
 
 func (c *Config) validate() error {

@@ -206,10 +206,14 @@ into the Go binary via `go:embed`. Cross-compile release binaries with
 
 Face-recognition models are adult-biased, so expect lower confidence on young
 children, and siblings can resemble each other. Enroll **5–15 varied, recent**
-photos per child, tune thresholds against a held-out set of real group photos
-(per-subject overrides live in the dossier), and re-enroll periodically as kids
-grow. After a model swap, use **Recompute embeddings** to re-embed from the
-retained originals — no re-upload needed.
+photos per child and re-enroll periodically as kids grow. After a model swap,
+use **Recompute embeddings** to re-embed from the retained originals — no
+re-upload needed.
+
+As you **confirm** and **reject** sightings, each subject's dossier shows a
+**threshold-tuning** card: the lowest similarity you accepted, the highest you
+rejected, and a suggested threshold sitting in the gap — one click to apply it
+as that child's per-subject override.
 
 ---
 

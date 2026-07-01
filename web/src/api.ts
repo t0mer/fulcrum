@@ -61,6 +61,20 @@ export interface Settings {
   provider: string;
 }
 
+export interface Tuning {
+  stats: {
+    confirmed_count: number;
+    rejected_count: number;
+    min_confirmed: number;
+    max_rejected: number;
+  };
+  suggestion: {
+    threshold: number;
+    has_suggestion: boolean;
+    overlap: boolean;
+  };
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -107,6 +121,8 @@ export const api = {
 
   reembedSubject: (id: number) =>
     req<{ embeddings: number }>(`/subjects/${id}/reembed`, { method: "POST" }),
+
+  getTuning: (id: number) => req<Tuning>(`/subjects/${id}/tuning`),
 
   reembedAll: () => req<{ embeddings: number }>("/subjects/reembed", { method: "POST" }),
 

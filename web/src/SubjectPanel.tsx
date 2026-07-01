@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, ApiError, type FaceCandidate, type SubjectDetail } from "./api";
+import { api, ApiError, type FaceCandidate, type SubjectDetail, type Tuning } from "./api";
 import { Button, Modal, Spinner, TextInput, useToast } from "./ui";
 
 export function SubjectPanel({ id, onBack }: { id: number; onBack: () => void }) {
@@ -111,6 +111,14 @@ export function SubjectPanel({ id, onBack }: { id: number; onBack: () => void })
         </div>
       </div>
 
+      <TuningCard
+        id={id}
+        onApplied={async () => {
+          await load();
+          toast("Threshold applied");
+        }}
+      />
+
       <Dropzone busy={busy} onFile={(f) => upload(f)} />
 
       <div className="flex items-baseline justify-between mt-8 mb-4">
@@ -171,6 +179,77 @@ export function SubjectPanel({ id, onBack }: { id: number; onBack: () => void })
         />
       )}
     </section>
+  );
+}
+
+function TuningCard({ id, onApplied }: { id: number; onApplied: () => void }) {
+  const [tuning, setTuning] = useState<Tuning | null>(null);
+  const [applying, setApplying] = useState(false);
+  const toast = useToast();
+
+  useEffect(() => {
+    api
+      .getTuning(id)
+      .then(setTuning)
+      .catch(() => {});
+  }, [id]);
+
+  if (!tuning) return null;
+  const { stats, suggestion } = tuning;
+  // Nothing to say until there's some review history.
+  if (stats.confirmed_count === 0 && stats.rejected_count === 0) return null;
+
+  const apply = async () => {
+    setApplying(true);
+    try {
+      await api.updateSubject(id, { threshold: suggestion.threshold });
+      onApplied();
+    } catch {
+      toast("Could not apply threshold", "err");
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  return (
+    <div className="dossier p-5 mt-6">
+      <div className="flex items-center justify-between mb-3">
+        <span className="stamp text-[11px] text-haze">threshold tuning</span>
+        <span className="data text-[11px] text-haze">
+          {stats.confirmed_count} confirmed · {stats.rejected_count} rejected
+        </span>
+      </div>
+      <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+        <Stat label="lowest confirmed" value={stats.min_confirmed} />
+        <Stat label="highest rejected" value={stats.max_rejected} />
+        {suggestion.has_suggestion && (
+          <div>
+            <div className="stamp text-[11px] text-haze mb-1">suggested</div>
+            <div className="data text-2xl text-signal">{suggestion.threshold.toFixed(2)}</div>
+          </div>
+        )}
+        {suggestion.has_suggestion && (
+          <Button className="ml-auto" onClick={apply} disabled={applying}>
+            {applying ? "Applying…" : "Apply suggestion"}
+          </Button>
+        )}
+      </div>
+      {suggestion.overlap && (
+        <p className="text-[11px] text-red-400 data mt-3">
+          A rejected face scored above your lowest confirmed one — these can't be
+          cleanly separated. Add more varied reference photos.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <div className="stamp text-[11px] text-haze mb-1">{label}</div>
+      <div className="data text-2xl">{value > 0 ? value.toFixed(2) : "—"}</div>
+    </div>
   );
 }
 

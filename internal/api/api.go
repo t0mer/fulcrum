@@ -33,6 +33,9 @@ type Deps struct {
 	// Config fallbacks surfaced by the settings API when no override is stored.
 	DefaultThreshold float64
 	DefaultSinkMode  string
+	// MatchesPath is the root of the match-output tree, so deleting a subject
+	// can also remove its collected images.
+	MatchesPath string
 }
 
 // API holds handler dependencies.
@@ -46,6 +49,7 @@ type API struct {
 	metrics          *metrics.Metrics
 	defaultThreshold float64
 	defaultSinkMode  string
+	matchesPath      string
 	log              *slog.Logger
 }
 
@@ -63,7 +67,7 @@ func New(d Deps) *API {
 		store: d.Store, enroll: d.Enroll, provider: d.Provider,
 		provName: d.ProviderName, notifier: d.Notifier, secret: d.WebhookSecret,
 		metrics: d.Metrics, defaultThreshold: d.DefaultThreshold, defaultSinkMode: sinkMode,
-		log: log,
+		matchesPath: d.MatchesPath, log: log,
 	}
 }
 
@@ -97,6 +101,8 @@ func (a *API) Routes() http.Handler {
 	r.Post("/provider/test", a.testProvider)
 	r.Get("/settings", a.getSettings)
 	r.Put("/settings", a.updateSettings)
+	r.Get("/docs", a.docs)
+	r.Get("/openapi.yaml", a.openapiSpec)
 	return r
 }
 

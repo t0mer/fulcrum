@@ -1,0 +1,322 @@
+openapi: 3.0.3
+info:
+  title: Fulcrum API
+  description: >
+    REST API for Fulcrum — WhatsApp group face-match watcher. The SPA is a
+    client of these endpoints. When no webhook secret is configured the intake
+    is open (documented first-run bootstrap behaviour).
+  version: "1.0"
+servers:
+  - url: /
+tags:
+  - name: health
+  - name: webhook
+  - name: subjects
+  - name: groups
+  - name: matches
+  - name: provider
+  - name: settings
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      summary: Liveness probe
+      responses:
+        "200":
+          description: Process is up
+  /readyz:
+    get:
+      tags: [health]
+      summary: Readiness probe
+      responses:
+        "200": { description: Ready }
+        "503": { description: A dependency is not ready }
+  /metrics:
+    get:
+      tags: [health]
+      summary: Prometheus metrics
+      responses:
+        "200": { description: Metrics exposition }
+  /webhook/{provider}:
+    post:
+      tags: [webhook]
+      summary: Inbound gateway callback
+      description: >
+        Verifies the X-Webhook-Secret header (when configured), normalizes the
+        payload via the active provider, and enqueues images from monitored
+        groups. Returns immediately; processing is asynchronous.
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string } }
+      security:
+        - webhookSecret: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Accepted (with count of enqueued jobs) }
+        "401": { description: Invalid webhook secret }
+  /api/subjects:
+    get:
+      tags: [subjects]
+      summary: List enrolled subjects
+      responses:
+        "200":
+          description: Subjects with reference-photo counts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Subject" }
+    post:
+      tags: [subjects]
+      summary: Create a subject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSubject" }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Subject" } } } }
+        "400": { description: Invalid name or slug }
+        "409": { description: Name or slug already exists }
+  /api/subjects/reembed:
+    post:
+      tags: [subjects]
+      summary: Recompute embeddings for every subject
+      responses:
+        "200": { description: Number of embeddings written }
+  /api/subjects/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [subjects]
+      summary: Get a subject with its reference photos
+      responses:
+        "200": { description: Subject detail }
+        "404": { description: Not found }
+    patch:
+      tags: [subjects]
+      summary: Rename or set the threshold (slug is immutable)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                threshold: { type: number, nullable: true }
+                clear_threshold: { type: boolean }
+      responses:
+        "200": { description: Updated }
+        "404": { description: Not found }
+    delete:
+      tags: [subjects]
+      summary: Delete a subject, its faces, and its collected matches
+      responses:
+        "200": { description: Deleted }
+        "404": { description: Not found }
+  /api/subjects/{id}/faces:
+    post:
+      tags: [subjects]
+      summary: Upload a reference photo (detect → store embedding)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+                face_index: { type: integer, description: "Which face to enroll when several are detected" }
+      responses:
+        "201": { description: Face stored }
+        "300": { description: Multiple faces; resubmit with face_index }
+        "415": { description: Unsupported media type }
+        "422": { description: No face detected }
+  /api/subjects/{id}/faces/{faceId}/image:
+    get:
+      tags: [subjects]
+      summary: Stream a stored reference photo
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: faceId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Image bytes }
+        "404": { description: Not found }
+  /api/subjects/{id}/faces/{faceId}:
+    delete:
+      tags: [subjects]
+      summary: Delete a reference photo (row + file)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: faceId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+        "404": { description: Not found }
+  /api/subjects/{id}/reembed:
+    post:
+      tags: [subjects]
+      summary: Recompute one subject's embeddings from retained originals
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Number of embeddings written }
+  /api/groups:
+    get:
+      tags: [groups]
+      summary: List groups (refreshes from the provider)
+      responses:
+        "200":
+          description: Known groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Group" }
+  /api/groups/{id}:
+    patch:
+      tags: [groups]
+      summary: Set monitored / destination flags
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                monitored: { type: boolean }
+                is_destination: { type: boolean }
+      responses:
+        "200": { description: Updated }
+        "404": { description: Not found }
+  /api/matches:
+    get:
+      tags: [matches]
+      summary: List matches
+      parameters:
+        - { name: subject_id, in: query, schema: { type: integer } }
+        - { name: reviewed, in: query, schema: { type: string, enum: [unreviewed, confirmed, rejected] } }
+      responses:
+        "200":
+          description: Matches
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Match" }
+  /api/matches/{id}/image:
+    get:
+      tags: [matches]
+      summary: Stream a stored match image
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Image bytes }
+        "404": { description: Not stored or missing }
+  /api/matches/{id}/review:
+    post:
+      tags: [matches]
+      summary: Confirm or reject a match (active learning)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [confirm, reject] }
+                reinforce: { type: boolean, description: "confirm only; add the matched face as a reference (default true)" }
+      responses:
+        "200": { description: Reviewed }
+        "404": { description: Not found }
+  /api/provider:
+    get:
+      tags: [provider]
+      summary: Active provider and connection status
+      responses:
+        "200": { description: Provider status }
+  /api/provider/test:
+    post:
+      tags: [provider]
+      summary: Test provider connectivity
+      responses:
+        "200": { description: Connected }
+        "502": { description: Gateway error }
+        "503": { description: No provider configured }
+  /api/settings:
+    get:
+      tags: [settings]
+      summary: Effective settings (stored value or config default)
+      responses:
+        "200": { description: Settings, content: { application/json: { schema: { $ref: "#/components/schemas/Settings" } } } }
+    put:
+      tags: [settings]
+      summary: Update runtime settings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                global_threshold: { type: number }
+                sink_mode: { type: string, enum: [storage-only, forward-only, both] }
+      responses:
+        "200": { description: Updated }
+        "400": { description: Invalid value }
+components:
+  securitySchemes:
+    webhookSecret:
+      type: apiKey
+      in: header
+      name: X-Webhook-Secret
+  schemas:
+    Subject:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string, description: "Display name; may be Hebrew/RTL" }
+        slug: { type: string, description: "^[a-z0-9-]{1,32}$; on-disk folder name" }
+        threshold: { type: number, nullable: true }
+        created_at: { type: string, format: date-time }
+        face_count: { type: integer }
+    CreateSubject:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        threshold: { type: number, nullable: true }
+    Group:
+      type: object
+      properties:
+        id: { type: integer }
+        provider_group_id: { type: string }
+        name: { type: string }
+        monitored: { type: boolean }
+        is_destination: { type: boolean }
+        last_seen: { type: string, format: date-time, nullable: true }
+    Match:
+      type: object
+      properties:
+        id: { type: integer }
+        subject_id: { type: integer }
+        subject_name: { type: string }
+        similarity: { type: number }
+        source_group: { type: string }
+        stored_path: { type: string }
+        forwarded: { type: boolean }
+        reviewed: { type: string, enum: [unreviewed, confirmed, rejected] }
+        created_at: { type: string, format: date-time }
+    Settings:
+      type: object
+      properties:
+        global_threshold: { type: number }
+        sink_mode: { type: string, enum: [storage-only, forward-only, both] }
+        provider: { type: string }

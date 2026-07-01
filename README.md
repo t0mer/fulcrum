@@ -134,7 +134,12 @@ variables use the `FULCRUM_` prefix with `.` → `_` (e.g. `server.port` →
 | Storage path | — | `FULCRUM_SINK_STORAGE_PATH` | `/data/matches` |
 | DB path | — | `FULCRUM_DB_PATH` | `/data/fulcrum.db` |
 
-`--version` prints the build version and exits.
+`--version` prints the build version and exits. `--service <install|uninstall|start|stop|restart|status>`
+manages Fulcrum as an OS service (via `kardianos/service`); the installed service
+re-runs with the same flags you passed alongside `--service`.
+
+Interactive API docs (Swagger UI) are served at **`/api/docs`**, with the raw
+spec at `/api/openapi.yaml`.
 
 ### WhatsApp providers
 

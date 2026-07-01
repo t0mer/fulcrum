@@ -169,9 +169,13 @@ func (a *API) deleteSubject(w http.ResponseWriter, r *http.Request) {
 		a.respondLookup(w, err)
 		return
 	}
-	// Remove the enrollment folder; matches output is retained (see §21 Q6).
+	// Remove both the enrollment folder and the collected matches (§21 Q6):
+	// deleting a kid leaves nothing of theirs on disk.
 	if err := a.enroll.RemoveSubjectFaces(sub.Slug); err != nil {
 		a.log.Warn("removing faces dir", "slug", sub.Slug, "err", err)
+	}
+	if err := a.removeMatchDir(sub.Slug); err != nil {
+		a.log.Warn("removing matches dir", "slug", sub.Slug, "err", err)
 	}
 	writeJSON(w, http.StatusOK, sub)
 }
@@ -331,6 +335,15 @@ func (a *API) respondLookup(w http.ResponseWriter, err error) {
 	}
 	a.log.Error("lookup", "err", err)
 	writeError(w, http.StatusInternalServerError, "internal error")
+}
+
+// removeMatchDir deletes matches/{slug}/. The slug is re-validated so this can
+// never escape the matches root.
+func (a *API) removeMatchDir(slug string) error {
+	if a.matchesPath == "" || !enroll.ValidSlug(slug) {
+		return nil
+	}
+	return os.RemoveAll(filepath.Join(a.matchesPath, slug))
 }
 
 type faceCandidate struct {

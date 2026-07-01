@@ -107,3 +107,32 @@ func TestRejectRecordsHardNegativeAndDeletesFile(t *testing.T) {
 func itoa(i int64) string {
 	return strconv.FormatInt(i, 10)
 }
+
+func TestDeleteSubjectRemovesMatchDir(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "t.db"))
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+	matchesRoot := filepath.Join(dir, "matches")
+	svc := enroll.New(st, nil, filepath.Join(dir, "faces"))
+	h := New(Deps{Store: st, Enroll: svc, MatchesPath: matchesRoot}).Routes()
+
+	sub, _ := st.CreateSubject("Yael", "yael", nil)
+	matchDir := filepath.Join(matchesRoot, "yael", "2026", "07")
+	if err := os.MkdirAll(matchDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(matchDir, "m.jpg"), []byte("x"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := do(t, h, http.MethodDelete, "/subjects/"+itoa(sub.ID), "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete = %d, want 200", rec.Code)
+	}
+	if _, err := os.Stat(filepath.Join(matchesRoot, "yael")); !os.IsNotExist(err) {
+		t.Errorf("matches/yael should be removed after subject delete")
+	}
+}

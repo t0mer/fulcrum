@@ -83,13 +83,44 @@ export class ApiError extends Error {
   }
 }
 
+const TOKEN_KEY = "fulcrum-api-token";
+
+export const auth = {
+  get: () => localStorage.getItem(TOKEN_KEY) ?? "",
+  set: (t: string) => localStorage.setItem(TOKEN_KEY, t),
+  clear: () => localStorage.removeItem(TOKEN_KEY),
+};
+
+function authHeaders(): Record<string, string> {
+  const t = auth.get();
+  return t ? { "X-API-Token": t } : {};
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, init);
+  const res = await fetch(`/api${path}`, {
+    ...init,
+    headers: { ...(init?.headers as Record<string, string>), ...authHeaders() },
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new ApiError(res.status, body.error ?? res.statusText);
   }
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
+}
+
+// fetchImageURL loads an image with the auth header (when a token is set) and
+// returns an object URL, since <img> tags can't send custom headers. With no
+// token it returns the direct URL so the browser loads it natively.
+export async function fetchImageURL(url: string): Promise<string> {
+  if (!auth.get()) return url;
+  const res = await fetch(url, { headers: authHeaders() });
+  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  return URL.createObjectURL(await res.blob());
+}
+
+export async function getAuthInfo(): Promise<{ auth_required: boolean }> {
+  const res = await fetch("/api/authinfo");
+  return res.json();
 }
 
 export const api = {
@@ -179,6 +210,7 @@ export const api = {
     if (faceIndex !== undefined) form.append("face_index", String(faceIndex));
     const res = await fetch(`/api/subjects/${subjectId}/faces`, {
       method: "POST",
+      headers: authHeaders(),
       body: form,
     });
     if (res.status === 300) {

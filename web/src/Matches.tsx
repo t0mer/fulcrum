@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type Match } from "./api";
-import { Button, Spinner, useToast } from "./ui";
+import { AuthImage, Button, Spinner, useToast } from "./ui";
 
 type Filter = "all" | "unreviewed" | "confirmed" | "rejected";
 
@@ -78,11 +78,10 @@ export function Matches({ onOpenSubject }: { onOpenSubject: (id: number) => void
         {matches?.map((m) => (
           <article key={m.id} className="dossier overflow-hidden rise flex flex-col">
             {m.stored_path ? (
-              <img
-                src={api.matchImageURL(m.id)}
+              <AuthImage
+                url={api.matchImageURL(m.id)}
                 alt={`match for ${m.subject_name}`}
                 className="w-full aspect-square object-cover"
-                loading="lazy"
               />
             ) : (
               <div className="w-full aspect-square grid place-items-center text-haze data text-[11px]">

@@ -123,6 +123,7 @@ variables use the `FULCRUM_` prefix with `.` → `_` (e.g. `server.port` →
 | HTTP port | `--server.port` | `FULCRUM_SERVER_PORT` | `8080` |
 | Log level | `--server.log_level` | `FULCRUM_SERVER_LOG_LEVEL` | `info` |
 | Webhook secret | — | `FULCRUM_SERVER_WEBHOOK_SECRET` | *(empty = open)* |
+| API auth token | — | `FULCRUM_SERVER_AUTH_TOKEN` | *(empty = open)* |
 | Provider | `--provider.name` | `FULCRUM_PROVIDER_NAME` | `gowa` |
 | Provider base URL | — | `FULCRUM_PROVIDER_BASE_URL` | — |
 | Provider token | — | `FULCRUM_PROVIDER_TOKEN` | — |
@@ -168,8 +169,15 @@ Pick one; the pipeline is provider-agnostic.
   provider-supplied media URLs for the worker to fetch. Outbound media fetches
   are additionally guarded against SSRF (loopback/private/link-local addresses
   are refused at dial time; redirects are disabled).
+- **Optional API auth.** Set `FULCRUM_SERVER_AUTH_TOKEN` to gate the whole
+  `/api` surface behind a token — presented as `X-API-Token` or HTTP Basic Auth
+  (the token as the password). The UI then shows a login screen; leave it empty
+  for open bootstrap on a trusted network.
 - Rejecting a match deletes its stored file. Secrets are read from env only and
   never logged.
+
+### Login (when an auth token is set)
+![Login](assets/screenshots/login.png)
 
 ---
 

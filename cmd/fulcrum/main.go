@@ -21,9 +21,13 @@ import (
 	"github.com/t0mer/fulcrum/internal/enroll"
 	"github.com/t0mer/fulcrum/internal/metrics"
 	"github.com/t0mer/fulcrum/internal/ml"
+	"github.com/t0mer/fulcrum/internal/pipeline"
+	"github.com/t0mer/fulcrum/internal/queue"
 	"github.com/t0mer/fulcrum/internal/server"
+	"github.com/t0mer/fulcrum/internal/sink"
 	"github.com/t0mer/fulcrum/internal/store"
 	"github.com/t0mer/fulcrum/internal/version"
+	"github.com/t0mer/fulcrum/internal/whatsapp"
 	"github.com/t0mer/fulcrum/web"
 )
 
@@ -62,7 +66,7 @@ func run() error {
 
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(prometheus.NewGoCollector())
-	_ = metrics.New(reg)
+	m := metrics.New(reg)
 
 	spa, err := web.Dist()
 	if err != nil {
@@ -71,13 +75,47 @@ func run() error {
 
 	mlClient := ml.New(cfg.ML.URL)
 	enrollSvc := enroll.New(st, mlClient, cfg.Enroll.FacesPath)
-	apiHandler := api.New(st, enrollSvc, logger).Routes()
+
+	provider, err := whatsapp.New(cfg.Provider.Name, whatsapp.Config{
+		BaseURL: cfg.Provider.BaseURL,
+		Token:   cfg.Provider.Token,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Worker pool + processing pipeline.
+	proc := pipeline.New(st, provider, mlClient,
+		&sink.Forward{Sender: provider, DestinationGroupID: cfg.Sink.DestinationGroupID},
+		pipeline.Config{
+			DefaultThreshold: cfg.Match.DefaultThreshold,
+			SinkMode:         cfg.Sink.Mode,
+			StoragePath:      cfg.Sink.StoragePath,
+		}, m, logger)
+	pool := queue.New(st, proc, queue.Options{
+		Workers:     cfg.Queue.Workers,
+		MaxAttempts: cfg.Queue.MaxAttempts,
+		Logger:      logger,
+		OnDepth:     func(d int) { m.QueueDepth.Set(float64(d)) },
+	})
+
+	apiSvc := api.New(api.Deps{
+		Store:         st,
+		Enroll:        enrollSvc,
+		Provider:      provider,
+		ProviderName:  cfg.Provider.Name,
+		Notifier:      pool,
+		WebhookSecret: cfg.Server.WebhookSecret,
+		Metrics:       m,
+		Logger:        logger,
+	})
 
 	handler := server.New(server.Options{
 		Logger:   logger,
 		Registry: reg,
 		SPA:      spa,
-		API:      apiHandler,
+		API:      apiSvc.Routes(),
+		Webhook:  apiSvc.WebhookHandler(),
 		Ready:    st.Ping,
 	})
 
@@ -89,6 +127,13 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Start the worker pool alongside the HTTP server.
+	poolDone := make(chan struct{})
+	go func() {
+		pool.Run(ctx)
+		close(poolDone)
+	}()
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -104,7 +149,9 @@ func run() error {
 		logger.Info("shutting down")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		return srv.Shutdown(shutdownCtx)
+		err := srv.Shutdown(shutdownCtx)
+		<-poolDone // wait for workers to finish the in-flight job
+		return err
 	}
 }
 

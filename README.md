@@ -45,6 +45,12 @@ optionally reinforce recognition, or reject it to delete the stored image.
 
 ![Watch log](assets/screenshots/watch.png)
 
+### Settings — tune matching at runtime
+Adjust the global threshold and delivery mode without a restart; per-subject
+thresholds still win.
+
+![Settings](assets/screenshots/settings.png)
+
 ---
 
 ## How it works

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -159,6 +160,41 @@ func (s *Service) ReembedAll(ctx context.Context) (int, error) {
 		total += n
 	}
 	return total, nil
+}
+
+// Reinforce adds a confirmed match's face as a new reference for the subject:
+// it copies the match image into faces/{slug}/ and stores the given embedding.
+// This makes the reinforced sample a first-class reference (it survives a
+// re-embed). Requires the match to have a stored image.
+func (s *Service) Reinforce(subject *store.Subject, embedding []float32, sourceImagePath string) (*store.Face, error) {
+	if sourceImagePath == "" {
+		return nil, fmt.Errorf("no stored image to reinforce from")
+	}
+	if len(embedding) == 0 {
+		return nil, fmt.Errorf("no embedding to reinforce with")
+	}
+	data, err := os.ReadFile(sourceImagePath)
+	if err != nil {
+		return nil, fmt.Errorf("reading match image: %w", err)
+	}
+	ext := strings.ToLower(filepath.Ext(sourceImagePath))
+	if !extRe.MatchString(ext) {
+		ext = ".jpg"
+	}
+	dir := s.subjectDir(subject.Slug)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return nil, fmt.Errorf("creating faces dir: %w", err)
+	}
+	path := filepath.Join(dir, uuid.NewString()+ext)
+	if err := os.WriteFile(path, data, 0o640); err != nil {
+		return nil, fmt.Errorf("writing reinforced photo: %w", err)
+	}
+	face, err := s.store.AddFace(subject.ID, embedding, path)
+	if err != nil {
+		_ = os.Remove(path)
+		return nil, err
+	}
+	return face, nil
 }
 
 // RemoveSubjectFaces deletes a subject's entire enrollment folder. The slug is

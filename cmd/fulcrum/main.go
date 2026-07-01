@@ -16,8 +16,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/pflag"
 
+	"github.com/t0mer/fulcrum/internal/api"
 	"github.com/t0mer/fulcrum/internal/config"
+	"github.com/t0mer/fulcrum/internal/enroll"
 	"github.com/t0mer/fulcrum/internal/metrics"
+	"github.com/t0mer/fulcrum/internal/ml"
 	"github.com/t0mer/fulcrum/internal/server"
 	"github.com/t0mer/fulcrum/internal/store"
 	"github.com/t0mer/fulcrum/internal/version"
@@ -66,10 +69,15 @@ func run() error {
 		return fmt.Errorf("loading embedded SPA: %w", err)
 	}
 
+	mlClient := ml.New(cfg.ML.URL)
+	enrollSvc := enroll.New(st, mlClient, cfg.Enroll.FacesPath)
+	apiHandler := api.New(st, enrollSvc, logger).Routes()
+
 	handler := server.New(server.Options{
 		Logger:   logger,
 		Registry: reg,
 		SPA:      spa,
+		API:      apiHandler,
 		Ready:    st.Ping,
 	})
 

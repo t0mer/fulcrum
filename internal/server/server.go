@@ -26,6 +26,8 @@ type Options struct {
 	Registry *prometheus.Registry
 	// SPA is the embedded frontend filesystem (rooted at the built assets).
 	SPA fs.FS
+	// API is mounted under /api; nil disables the REST API.
+	API http.Handler
 	// Ready is consulted by /readyz; nil means always ready.
 	Ready ReadyFunc
 }
@@ -61,7 +63,11 @@ func New(opts Options) http.Handler {
 		r.Handle("/metrics", promhttp.HandlerFor(opts.Registry, promhttp.HandlerOpts{}))
 	}
 
-	// TODO(milestone-4+): /webhook/{provider} and /api/* mount here.
+	if opts.API != nil {
+		r.Mount("/api", opts.API)
+	}
+
+	// TODO(milestone-4+): /webhook/{provider} mounts here.
 
 	if opts.SPA != nil {
 		r.NotFound(spaHandler(opts.SPA))

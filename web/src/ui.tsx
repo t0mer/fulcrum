@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import { fetchImageURL } from "./api";
 
 type Variant = "primary" | "ghost" | "danger";
 
@@ -72,6 +73,38 @@ export function Modal({
       </div>
     </div>
   );
+}
+
+/* AuthImage loads via fetch with the API token when one is set (so it works
+   behind auth), falling back to a plain URL otherwise. */
+export function AuthImage({
+  url,
+  alt,
+  className,
+}: {
+  url: string;
+  alt: string;
+  className?: string;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let revoke: string | null = null;
+    let active = true;
+    fetchImageURL(url)
+      .then((u) => {
+        if (!active) return;
+        if (u.startsWith("blob:")) revoke = u;
+        setSrc(u);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+      if (revoke) URL.revokeObjectURL(revoke);
+    };
+  }, [url]);
+
+  if (!src) return <div className={className} />;
+  return <img src={src} alt={alt} className={className} loading="lazy" />;
 }
 
 export function Spinner({ label }: { label?: string }) {

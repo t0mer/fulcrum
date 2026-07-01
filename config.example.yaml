@@ -14,6 +14,9 @@ server:
   # header. Leave empty only for first-run bootstrap on a trusted network — an
   # open webhook lets anyone enqueue provider-supplied media URLs to fetch.
   webhook_secret: ""       # set via FULCRUM_SERVER_WEBHOOK_SECRET
+  # Gate the /api surface behind a token (X-API-Token header or Basic Auth
+  # password). Empty = open bootstrap. Set via FULCRUM_SERVER_AUTH_TOKEN.
+  auth_token: ""
 
 provider:
   name: gowa               # gowa | greenapi | wwebjs

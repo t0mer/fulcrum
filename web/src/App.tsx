@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ToastProvider } from "./ui";
+import { api, auth, getAuthInfo } from "./api";
+import { Button, Spinner, TextInput, ToastProvider } from "./ui";
 import { Roster } from "./Roster";
 import { SubjectPanel } from "./SubjectPanel";
 import { Groups } from "./Groups";
@@ -8,6 +9,7 @@ import { Settings } from "./Settings";
 
 type Theme = "dark" | "light";
 type View = "subjects" | "groups" | "matches" | "settings";
+type Gate = "checking" | "login" | "open";
 
 function useTheme(): [Theme, () => void] {
   const [theme, setTheme] = useState<Theme>(() => {
@@ -33,11 +35,41 @@ export function App() {
   const [theme, toggleTheme] = useTheme();
   const [view, setView] = useState<View>("subjects");
   const [selected, setSelected] = useState<number | null>(null);
+  const [gate, setGate] = useState<Gate>("checking");
+  const [authRequired, setAuthRequired] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const info = await getAuthInfo().catch(() => ({ auth_required: false }));
+      setAuthRequired(info.auth_required);
+      if (!info.auth_required) return setGate("open");
+      if (auth.get()) {
+        try {
+          await api.getSettings(); // validates the stored token
+          return setGate("open");
+        } catch {
+          auth.clear();
+        }
+      }
+      setGate("login");
+    })();
+  }, []);
 
   const go = (v: View) => {
     setSelected(null);
     setView(v);
   };
+
+  if (gate === "checking") {
+    return (
+      <div className="min-h-screen grid place-items-center">
+        <Spinner label="Connecting…" />
+      </div>
+    );
+  }
+  if (gate === "login") {
+    return <Login onOk={() => setGate("open")} />;
+  }
 
   return (
     <ToastProvider>
@@ -67,6 +99,17 @@ export function App() {
                   </button>
                 ))}
               </nav>
+              {authRequired && (
+                <button
+                  onClick={() => {
+                    auth.clear();
+                    window.location.reload();
+                  }}
+                  className="stamp text-[11px] text-haze hover:text-signal transition-colors"
+                >
+                  sign out
+                </button>
+              )}
               <button
                 onClick={toggleTheme}
                 className="stamp text-[11px] text-haze hover:text-signal transition-colors"
@@ -97,5 +140,58 @@ export function App() {
         </footer>
       </div>
     </ToastProvider>
+  );
+}
+
+function Login({ onOk }: { onOk: () => void }) {
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const submit = async () => {
+    setBusy(true);
+    setErr("");
+    auth.set(token.trim());
+    try {
+      await api.getSettings();
+      onOk();
+    } catch {
+      auth.clear();
+      setErr("That token was not accepted.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen grid place-items-center p-4">
+      <div className="dossier w-full max-w-sm p-8">
+        <div className="stamp text-signal text-xl mb-1">FULCRUM</div>
+        <p className="data text-[11px] text-haze mb-6">restricted · access token required</p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (token.trim()) submit();
+          }}
+        >
+          <TextInput
+            label="API token"
+            type="password"
+            value={token}
+            autoFocus
+            onChange={(e) => setToken(e.target.value)}
+          />
+          {err && <p className="text-red-400 text-xs mt-2">{err}</p>}
+          <Button
+            variant="primary"
+            className="w-full mt-5"
+            type="submit"
+            disabled={busy || !token.trim()}
+          >
+            {busy ? "Verifying…" : "Unlock"}
+          </Button>
+        </form>
+      </div>
+    </div>
   );
 }

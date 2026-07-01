@@ -28,6 +28,7 @@ type Deps struct {
 	ProviderName  string
 	Notifier      Notifier
 	WebhookSecret string
+	AuthToken     string
 	Metrics       *metrics.Metrics
 	Logger        *slog.Logger
 	// Config fallbacks surfaced by the settings API when no override is stored.
@@ -46,6 +47,7 @@ type API struct {
 	provName         string
 	notifier         Notifier
 	secret           string
+	authToken        string
 	metrics          *metrics.Metrics
 	defaultThreshold float64
 	defaultSinkMode  string
@@ -66,14 +68,29 @@ func New(d Deps) *API {
 	return &API{
 		store: d.Store, enroll: d.Enroll, provider: d.Provider,
 		provName: d.ProviderName, notifier: d.Notifier, secret: d.WebhookSecret,
-		metrics: d.Metrics, defaultThreshold: d.DefaultThreshold, defaultSinkMode: sinkMode,
+		authToken: d.AuthToken,
+		metrics:   d.Metrics, defaultThreshold: d.DefaultThreshold, defaultSinkMode: sinkMode,
 		matchesPath: d.MatchesPath, log: log,
 	}
 }
 
-// Routes returns the router to mount under /api.
+// Routes returns the router to mount under /api. /authinfo is public so the SPA
+// can discover whether a login is needed; everything else is gated by the auth
+// middleware (a no-op when no token is configured).
 func (a *API) Routes() http.Handler {
 	r := chi.NewRouter()
+	r.Get("/authinfo", a.authInfo) // public: reveals whether login is needed
+
+	// Everything below is gated by the auth middleware (a no-op when no token
+	// is configured).
+	r.Group(func(r chi.Router) {
+		r.Use(a.authMiddleware)
+		a.protectedRoutes(r)
+	})
+	return r
+}
+
+func (a *API) protectedRoutes(r chi.Router) {
 	r.Route("/subjects", func(r chi.Router) {
 		r.Get("/", a.listSubjects)
 		r.Post("/", a.createSubject)
@@ -104,7 +121,6 @@ func (a *API) Routes() http.Handler {
 	r.Put("/settings", a.updateSettings)
 	r.Get("/docs", a.docs)
 	r.Get("/openapi.yaml", a.openapiSpec)
-	return r
 }
 
 // WebhookHandler handles POST /webhook/{provider} at the server root.

@@ -182,6 +182,7 @@ func (p *program) daemon(ctx context.Context) error {
 		ProviderName:     cfg.Provider.Name,
 		Notifier:         pool,
 		WebhookSecret:    cfg.Server.WebhookSecret,
+		AuthToken:        cfg.Server.AuthToken,
 		Metrics:          m,
 		Logger:           logger,
 		DefaultThreshold: cfg.Match.DefaultThreshold,

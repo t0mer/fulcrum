@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, type FaceCandidate, type SubjectDetail, type Tuning } from "./api";
-import { Button, Modal, Spinner, TextInput, useToast } from "./ui";
+import { AuthImage, Button, Modal, Spinner, TextInput, useToast } from "./ui";
 
 export function SubjectPanel({ id, onBack }: { id: number; onBack: () => void }) {
   const [subject, setSubject] = useState<SubjectDetail | null>(null);
@@ -134,11 +134,10 @@ export function SubjectPanel({ id, onBack }: { id: number; onBack: () => void })
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
           {subject.faces.map((f) => (
             <div key={f.id} className="relative group aspect-square overflow-hidden dossier">
-              <img
-                src={`/api/subjects/${id}/faces/${f.id}/image`}
+              <AuthImage
+                url={`/api/subjects/${id}/faces/${f.id}/image`}
                 alt="reference"
                 className="h-full w-full object-cover"
-                loading="lazy"
               />
               <button
                 onClick={() => removeFace(f.id)}

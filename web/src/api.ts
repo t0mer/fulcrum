@@ -128,7 +128,7 @@ export const api = {
   },
 
   reviewMatch: (id: number, decision: "confirm" | "reject") =>
-    req<{ reviewed: string }>(`/matches/${id}/review`, {
+    req<{ reviewed: string; reinforced?: boolean }>(`/matches/${id}/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ decision }),

@@ -21,8 +21,14 @@ export function Matches({ onOpenSubject }: { onOpenSubject: (id: number) => void
 
   const review = async (m: Match, decision: "confirm" | "reject") => {
     try {
-      await api.reviewMatch(m.id, decision);
-      toast(decision === "confirm" ? "Match confirmed" : "Match rejected");
+      const res = await api.reviewMatch(m.id, decision);
+      const msg =
+        decision === "reject"
+          ? "Match rejected"
+          : res.reinforced
+            ? "Confirmed · added as a reference"
+            : "Match confirmed";
+      toast(msg);
       await load(filter);
     } catch (e) {
       toast(e instanceof ApiError ? e.message : "Review failed", "err");

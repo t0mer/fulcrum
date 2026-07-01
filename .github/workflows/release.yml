@@ -59,8 +59,7 @@ jobs:
           git push origin "$VERSION"
 
       - name: Create GitHub Release
-        # Pin to a SHA for the chosen v2.x release when hardening.
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
           files: dist/*

@@ -27,6 +27,34 @@ export interface FaceCandidate {
   det_score: number;
 }
 
+export interface Group {
+  id: number;
+  provider_group_id: string;
+  name: string;
+  monitored: boolean;
+  is_destination: boolean;
+  last_seen?: string | null;
+}
+
+export interface Match {
+  id: number;
+  message_id: string;
+  subject_id: number;
+  subject_name: string;
+  subject_slug: string;
+  similarity: number;
+  source_group: string;
+  stored_path: string;
+  forwarded: boolean;
+  reviewed: "unreviewed" | "confirmed" | "rejected";
+  created_at: string;
+}
+
+export interface ProviderStatus {
+  name: string;
+  connected: boolean;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -75,6 +103,38 @@ export const api = {
     req<{ embeddings: number }>(`/subjects/${id}/reembed`, { method: "POST" }),
 
   reembedAll: () => req<{ embeddings: number }>("/subjects/reembed", { method: "POST" }),
+
+  listGroups: () => req<Group[]>("/groups/"),
+
+  updateGroup: (id: number, body: { monitored?: boolean; is_destination?: boolean }) =>
+    req<{ status: string }>(`/groups/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+
+  listMatches: (filter?: { subject_id?: number; reviewed?: string }) => {
+    const p = new URLSearchParams();
+    if (filter?.subject_id) p.set("subject_id", String(filter.subject_id));
+    if (filter?.reviewed) p.set("reviewed", filter.reviewed);
+    const qs = p.toString();
+    return req<Match[]>(`/matches/${qs ? `?${qs}` : ""}`);
+  },
+
+  reviewMatch: (id: number, decision: "confirm" | "reject") =>
+    req<{ reviewed: string }>(`/matches/${id}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision }),
+    }),
+
+  matchImageURL: (id: number) => `/api/matches/${id}/image`,
+
+  getProvider: () => req<ProviderStatus>("/provider"),
+
+  testProvider: () => req<{ ok: boolean; groups?: number; error?: string }>("/provider/test", {
+    method: "POST",
+  }),
 
   // Upload returns the created face, or a 300 with candidates when several
   // faces are found and the caller must choose one.

@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+/* --- Theme tokens: dark is the primary identity, light is a faithful echo --- */
+:root,
+[data-theme="dark"] {
+  --ink: #0e1420;
+  --panel: #151d2c;
+  --panel-2: #1b2536;
+  --edge: #27324a;
+  --haze: #8794ab;
+  --bone: #e9edf4;
+  --signal: #f26a2e;
+  --signal-soft: rgba(242, 106, 46, 0.14);
+  --ready: #46b7a6;
+  --scan: rgba(255, 255, 255, 0.028);
+}
+
+[data-theme="light"] {
+  --ink: #f3f1ea;
+  --panel: #ffffff;
+  --panel-2: #f6f4ee;
+  --edge: #d8d2c4;
+  --haze: #6d6a60;
+  --bone: #1c1a15;
+  --signal: #d1531b;
+  --signal-soft: rgba(209, 83, 27, 0.1);
+  --ready: #1f8b7c;
+  --scan: rgba(0, 0, 0, 0.02);
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-edge: var(--edge);
+  --color-haze: var(--haze);
+  --color-bone: var(--bone);
+  --color-signal: var(--signal);
+  --color-ready: var(--ready);
+
+  --font-display: "Archivo", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+html {
+  background: var(--ink);
+  color-scheme: dark light;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--bone);
+  background: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Stamped agency label: wide tracked uppercase display type. */
+.stamp {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  font-weight: 700;
+}
+
+.data {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Signature: corner-notched dossier card (file-tab cut, top-right). */
+.dossier {
+  --notch: 22px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--notch)) 0,
+    100% var(--notch),
+    100% 100%,
+    0 100%
+  );
+}
+
+/* Faint scanline wash for the header band. */
+.scanlines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--scan) 0,
+    var(--scan) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rise {
+    animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+::selection {
+  background: var(--signal);
+  color: #fff;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}

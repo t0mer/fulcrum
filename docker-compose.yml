@@ -1,0 +1,38 @@
+# Fulcrum stack: the Go core (published) and the ML sidecar (internal only).
+#
+# fulcrum-ml has no auth by design and is reachable only on the internal
+# network — never publish its port or put it behind a reverse proxy.
+services:
+  fulcrum:
+    image: techblog/fulcrum:latest
+    build:
+      context: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - fulcrum-data:/data      # named volume: sqlite db + faces/ + matches/
+    environment:
+      FULCRUM_SERVER_LOG_LEVEL: info
+      FULCRUM_ML_URL: http://fulcrum-ml:8081
+      # Secrets via env only (never commit): FULCRUM_SERVER_WEBHOOK_SECRET,
+      # FULCRUM_PROVIDER_TOKEN, ...
+    depends_on:
+      - fulcrum-ml
+    restart: unless-stopped
+
+  fulcrum-ml:
+    image: techblog/fulcrum-ml:latest
+    build:
+      context: ./fulcrum-ml
+    # No ports: internal network only.
+    expose:
+      - "8081"
+    volumes:
+      - fulcrum-models:/models  # insightface weights, downloaded at runtime
+    environment:
+      FULCRUM_ML_LOG_LEVEL: info
+    restart: unless-stopped
+
+volumes:
+  fulcrum-data:
+  fulcrum-models:

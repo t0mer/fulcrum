@@ -1,0 +1,41 @@
+# Fulcrum configuration example.
+#
+# Precedence: flags > env > this file > built-in defaults.
+# Env vars use the FULCRUM_ prefix with "." replaced by "_"
+#   e.g. server.port -> FULCRUM_SERVER_PORT
+# Secrets (webhook_secret, provider.token) should be supplied via env, not this file.
+
+db_path: /data/fulcrum.db
+
+server:
+  port: 8080
+  log_level: info          # debug | info | warning | error
+  # Strongly recommended: verifies inbound webhooks via the X-Webhook-Secret
+  # header. Leave empty only for first-run bootstrap on a trusted network — an
+  # open webhook lets anyone enqueue provider-supplied media URLs to fetch.
+  webhook_secret: ""       # set via FULCRUM_SERVER_WEBHOOK_SECRET
+
+provider:
+  name: gowa               # gowa | greenapi | wwebjs
+  base_url: ""
+  token: ""                # set via FULCRUM_PROVIDER_TOKEN
+
+ml:
+  url: http://fulcrum-ml:8081
+  det_score: 0.5           # minimum detection score (do not go below 0.5)
+
+match:
+  default_threshold: 0.48  # cosine; tune per-subject on real group photos
+  near_dup_distance: 4     # max dHash distance to treat images as the same; 0 disables
+
+enroll:
+  faces_path: /data/faces  # per-kid reference photos: {faces_path}/{slug}/
+
+queue:
+  workers: 2               # keep low on arm64 CPU
+  max_attempts: 5
+
+sink:
+  mode: both               # storage-only | forward-only | both
+  storage_path: /data/matches
+  destination_group_id: "" # chosen in the UI

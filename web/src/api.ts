@@ -55,6 +55,12 @@ export interface ProviderStatus {
   connected: boolean;
 }
 
+export interface Settings {
+  global_threshold: number;
+  sink_mode: "storage-only" | "forward-only" | "both";
+  provider: string;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -135,6 +141,15 @@ export const api = {
   testProvider: () => req<{ ok: boolean; groups?: number; error?: string }>("/provider/test", {
     method: "POST",
   }),
+
+  getSettings: () => req<Settings>("/settings"),
+
+  updateSettings: (body: { global_threshold?: number; sink_mode?: string }) =>
+    req<Settings>("/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
 
   // Upload returns the created face, or a 300 with candidates when several
   // faces are found and the caller must choose one.

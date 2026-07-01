@@ -4,9 +4,10 @@ import { Roster } from "./Roster";
 import { SubjectPanel } from "./SubjectPanel";
 import { Groups } from "./Groups";
 import { Matches } from "./Matches";
+import { Settings } from "./Settings";
 
 type Theme = "dark" | "light";
-type View = "subjects" | "groups" | "matches";
+type View = "subjects" | "groups" | "matches" | "settings";
 
 function useTheme(): [Theme, () => void] {
   const [theme, setTheme] = useState<Theme>(() => {
@@ -25,6 +26,7 @@ const TABS: { id: View; label: string }[] = [
   { id: "subjects", label: "registry" },
   { id: "groups", label: "channels" },
   { id: "matches", label: "watch" },
+  { id: "settings", label: "settings" },
 ];
 
 export function App() {
@@ -83,8 +85,10 @@ export function App() {
             <Roster onOpen={setSelected} />
           ) : view === "groups" ? (
             <Groups />
-          ) : (
+          ) : view === "matches" ? (
             <Matches onOpenSubject={setSelected} />
+          ) : (
+            <Settings />
           )}
         </main>
 

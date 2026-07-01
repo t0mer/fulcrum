@@ -9,10 +9,10 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
+	"strings"
 	"time"
 
+	"github.com/kardianos/service"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/pflag"
 
@@ -41,6 +41,7 @@ func main() {
 func run() error {
 	fs := pflag.NewFlagSet("fulcrum", pflag.ContinueOnError)
 	showVersion := fs.Bool("version", false, "print version and exit")
+	serviceAction := fs.String("service", "", "OS service control: install|uninstall|start|stop|restart|status")
 	config.BindFlags(fs)
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		return err
@@ -50,7 +51,82 @@ func run() error {
 		return nil
 	}
 
-	cfg, err := config.Load(fs)
+	svcConfig := &service.Config{
+		Name:        "fulcrum",
+		DisplayName: "Fulcrum",
+		Description: "Watches WhatsApp groups and forwards photos of enrolled subjects.",
+		// Re-run with the same flags (minus --service) when the manager starts us.
+		Arguments: withoutServiceFlag(os.Args[1:]),
+	}
+	prg := &program{flags: fs}
+	svc, err := service.New(prg, svcConfig)
+	if err != nil {
+		return fmt.Errorf("creating service: %w", err)
+	}
+
+	if *serviceAction != "" {
+		return controlService(svc, *serviceAction)
+	}
+	// service.Run handles both foreground (interactive) and managed execution;
+	// it calls prg.Start then blocks, and prg.Stop on shutdown signals.
+	return svc.Run()
+}
+
+func controlService(svc service.Service, action string) error {
+	if action == "status" {
+		status, err := svc.Status()
+		if err != nil {
+			return err
+		}
+		fmt.Println(statusString(status))
+		return nil
+	}
+	return service.Control(svc, action)
+}
+
+func statusString(s service.Status) string {
+	switch s {
+	case service.StatusRunning:
+		return "running"
+	case service.StatusStopped:
+		return "stopped"
+	default:
+		return "unknown"
+	}
+}
+
+// program adapts the daemon to the kardianos service lifecycle.
+type program struct {
+	flags  *pflag.FlagSet
+	cancel context.CancelFunc
+	done   chan struct{}
+	err    error
+}
+
+func (p *program) Start(service.Service) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	p.cancel = cancel
+	p.done = make(chan struct{})
+	go func() {
+		defer close(p.done)
+		p.err = p.daemon(ctx)
+	}()
+	return nil
+}
+
+func (p *program) Stop(service.Service) error {
+	if p.cancel != nil {
+		p.cancel()
+	}
+	if p.done != nil {
+		<-p.done
+	}
+	return p.err
+}
+
+// daemon builds and runs the full stack until ctx is cancelled.
+func (p *program) daemon(ctx context.Context) error {
+	cfg, err := config.Load(p.flags)
 	if err != nil {
 		return err
 	}
@@ -84,7 +160,6 @@ func run() error {
 		return err
 	}
 
-	// Worker pool + processing pipeline.
 	proc := pipeline.New(st, provider, mlClient,
 		&sink.Forward{Sender: provider, DestinationGroupID: cfg.Sink.DestinationGroupID},
 		pipeline.Config{
@@ -110,6 +185,7 @@ func run() error {
 		Logger:           logger,
 		DefaultThreshold: cfg.Match.DefaultThreshold,
 		DefaultSinkMode:  cfg.Sink.Mode,
+		MatchesPath:      cfg.Sink.StoragePath,
 	})
 
 	handler := server.New(server.Options{
@@ -127,10 +203,6 @@ func run() error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	// Start the worker pool alongside the HTTP server.
 	poolDone := make(chan struct{})
 	go func() {
 		pool.Run(ctx)
@@ -155,6 +227,28 @@ func run() error {
 		<-poolDone // wait for workers to finish the in-flight job
 		return err
 	}
+}
+
+// withoutServiceFlag returns args with the --service flag (and its value)
+// removed, so the installed service doesn't recurse into control mode.
+func withoutServiceFlag(args []string) []string {
+	out := make([]string, 0, len(args))
+	skip := false
+	for _, a := range args {
+		if skip {
+			skip = false
+			continue
+		}
+		if a == "--service" || a == "-service" {
+			skip = true // value follows as the next token
+			continue
+		}
+		if strings.HasPrefix(a, "--service=") || strings.HasPrefix(a, "-service=") {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 func newLogger(level string) *slog.Logger {

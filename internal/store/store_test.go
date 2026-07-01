@@ -1,6 +1,7 @@
 package store
 
 import (
+	"io/fs"
 	"path/filepath"
 	"testing"
 )
@@ -40,8 +41,12 @@ func TestMigrationsAreIdempotent(t *testing.T) {
 	if err := s2.DB().QueryRow("SELECT COUNT(1) FROM schema_migrations").Scan(&applied); err != nil {
 		t.Fatalf("counting migrations: %v", err)
 	}
-	if applied != 1 {
-		t.Errorf("applied migrations = %d, want 1", applied)
+	files, err := fs.ReadDir(migrationsFS, "migrations")
+	if err != nil {
+		t.Fatalf("reading migrations: %v", err)
+	}
+	if applied != len(files) {
+		t.Errorf("applied migrations = %d, want %d (one per file, no re-apply)", applied, len(files))
 	}
 }
 

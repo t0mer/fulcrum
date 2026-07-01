@@ -22,16 +22,21 @@ type Match struct {
 	Forwarded     bool      `json:"forwarded"`
 	Reviewed      string    `json:"reviewed"`
 	CreatedAt     time.Time `json:"created_at"`
+	Embedding     []float32 `json:"-"` // matched face; used to reinforce on confirm
 }
 
 // CreateMatch inserts a match, ignoring the (message_id, subject) duplicate.
 // Returns the new id, or 0 if it already existed.
 func (s *Store) CreateMatch(m Match) (int64, error) {
+	var emb []byte
+	if len(m.Embedding) > 0 {
+		emb = EncodeEmbedding(m.Embedding)
+	}
 	res, err := s.db.Exec(
 		`INSERT OR IGNORE INTO matches
-		   (message_id, image_sha256, subject_id, similarity, source_group_id, stored_path, forwarded)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		m.MessageID, m.ImageSHA256, m.SubjectID, m.Similarity, m.SourceGroupID, m.StoredPath, m.Forwarded,
+		   (message_id, image_sha256, subject_id, similarity, source_group_id, stored_path, forwarded, embedding)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.MessageID, m.ImageSHA256, m.SubjectID, m.Similarity, m.SourceGroupID, m.StoredPath, m.Forwarded, emb,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("inserting match: %w", err)
@@ -89,28 +94,50 @@ func (s *Store) ListMatches(f MatchFilter) ([]Match, error) {
 	return out, rows.Err()
 }
 
-// GetMatch fetches one match with joined names.
+// GetMatch fetches one match with joined names (including the matched embedding).
 func (s *Store) GetMatch(id int64) (*Match, error) {
 	var m Match
+	var emb []byte
 	err := s.db.QueryRow(
 		`SELECT m.id, m.message_id, m.image_sha256, m.subject_id,
 		        s.name, s.slug, m.similarity, m.source_group_id,
 		        COALESCE(g.name, m.source_group_id), m.stored_path,
-		        m.forwarded, m.reviewed, m.created_at
+		        m.forwarded, m.reviewed, m.created_at, m.embedding
 		   FROM matches m
 		   JOIN subjects s ON s.id = m.subject_id
 	  LEFT JOIN groups g ON g.provider_group_id = m.source_group_id
 		  WHERE m.id = ?`, id).
 		Scan(&m.ID, &m.MessageID, &m.ImageSHA256, &m.SubjectID,
 			&m.SubjectName, &m.SubjectSlug, &m.Similarity, &m.SourceGroupID,
-			&m.SourceGroup, &m.StoredPath, &m.Forwarded, &m.Reviewed, &m.CreatedAt)
+			&m.SourceGroup, &m.StoredPath, &m.Forwarded, &m.Reviewed, &m.CreatedAt, &emb)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("getting match: %w", err)
 	}
+	if len(emb) > 0 {
+		if e, derr := DecodeEmbedding(emb); derr == nil {
+			m.Embedding = e
+		}
+	}
 	return &m, nil
+}
+
+// RecordHardNegative stores a rejected match's embedding as a false-positive
+// example for later threshold tuning.
+func (s *Store) RecordHardNegative(subjectID int64, embedding []float32, similarity float64) error {
+	if len(embedding) == 0 {
+		return nil
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO hard_negatives (subject_id, embedding, similarity) VALUES (?, ?, ?)`,
+		subjectID, EncodeEmbedding(embedding), similarity,
+	)
+	if err != nil {
+		return fmt.Errorf("recording hard negative: %w", err)
+	}
+	return nil
 }
 
 // SetReviewed marks a match confirmed or rejected.

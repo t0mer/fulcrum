@@ -1,6 +1,13 @@
-# fulcrum Go core -> scratch image. The SPA is embedded from the committed
-# web/dist placeholder; once the real Vite build lands, add a node stage that
-# writes to web/dist before this build.
+# fulcrum Go core -> scratch image.
+# Stage 1: build the SPA once on the native build platform (static output).
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend
+WORKDIR /web
+COPY web/package*.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build   # Vite outDir -> web/dist
+
+# Stage 2: Go binary, cross-compiled to the target, with the SPA embedded.
 FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 WORKDIR /app
 ENV GOTOOLCHAIN=local
@@ -8,6 +15,7 @@ ENV CGO_ENABLED=0
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+COPY --from=frontend /web/dist ./web/dist
 ARG VERSION=docker
 ARG TARGETOS
 ARG TARGETARCH

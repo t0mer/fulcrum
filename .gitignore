@@ -35,12 +35,13 @@ vendor/
 
 # Frontend
 web/node_modules/
-web/dist/
 web/.vite/
+*.tsbuildinfo
 *.log
 npm-debug.log*
-# Keep a tracked placeholder so the go:embed compiles before any frontend build
-!web/dist/
+# Ignore built output but keep a tracked placeholder index.html so the
+# go:embed compiles before any frontend build has run.
+web/dist/*
 !web/dist/index.html
 
 # Local dev config / data

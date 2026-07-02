@@ -152,7 +152,6 @@ Pick one; the pipeline is provider-agnostic.
 |---|---|---|
 | [go-whatsapp-web-multidevice](https://github.com/aldinokemal/go-whatsapp-web-multidevice) | `gowa` | **Default.** Native-Go gateway; no third party touches the images. |
 | [green-api](https://green-api.com) | `greenapi` | WhatsApp cloud — routes media through a third party; avoid for children's photos. Token is `<idInstance>:<apiToken>`. |
-| [wwebjs-api](https://github.com/avoylenko/wwebjs-api) | `wwebjs` | Chromium-backed; heavier on ARM. Drives the `fulcrum` session. |
 
 > Gateway endpoint and webhook field mappings follow each project's own API.
 > Confirm them against the version you deploy.

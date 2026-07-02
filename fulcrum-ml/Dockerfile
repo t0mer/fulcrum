@@ -1,9 +1,24 @@
+# Stage 1: build wheels. insightface ships a Cython C++ extension that must be
+# compiled, so this stage needs a toolchain; the runtime image stays slim.
+FROM python:3.12-slim AS builder
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt .
+# Install into a relocatable prefix that we copy into the runtime image.
+RUN pip install --prefix=/install -r requirements.txt
+
+# Stage 2: slim runtime — no build tools.
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     FULCRUM_ML_MODEL_ROOT=/models
 
 WORKDIR /app
@@ -15,9 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
+COPY --from=builder /install /usr/local
 COPY app/ /app/app/
 
 # Model cache (mounted volume). insightface downloads non-redistributable

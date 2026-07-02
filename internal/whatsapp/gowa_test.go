@@ -9,7 +9,7 @@ import (
 )
 
 func TestRegistryHasProviders(t *testing.T) {
-	for _, name := range []string{"gowa", "greenapi", "wwebjs"} {
+	for _, name := range []string{"gowa", "greenapi"} {
 		if _, err := New(name, Config{}); err != nil {
 			t.Errorf("provider %q not registered: %v", name, err)
 		}

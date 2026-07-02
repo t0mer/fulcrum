@@ -19,7 +19,7 @@ server:
   auth_token: ""
 
 provider:
-  name: gowa               # gowa | greenapi | wwebjs
+  name: gowa               # gowa | greenapi
   base_url: ""
   token: ""                # set via FULCRUM_PROVIDER_TOKEN
 

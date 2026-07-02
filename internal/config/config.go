@@ -38,7 +38,7 @@ type ServerConfig struct {
 
 // ProviderConfig selects and configures the active WhatsApp gateway adapter.
 type ProviderConfig struct {
-	Name    string `mapstructure:"name"` // gowa | greenapi | wwebjs
+	Name    string `mapstructure:"name"` // gowa | greenapi
 	BaseURL string `mapstructure:"base_url"`
 	Token   string `mapstructure:"token"`
 }
@@ -81,7 +81,7 @@ func BindFlags(fs *pflag.FlagSet) {
 	fs.String("config", "", "path to YAML config file")
 	fs.Int("server.port", 8080, "HTTP listen port")
 	fs.String("server.log_level", "info", "log level: debug|info|warning|error")
-	fs.String("provider.name", "gowa", "WhatsApp provider: gowa|greenapi|wwebjs")
+	fs.String("provider.name", "gowa", "WhatsApp provider: gowa|greenapi")
 	fs.String("ml.url", "http://fulcrum-ml:8081", "fulcrum-ml sidecar base URL")
 	fs.Int("queue.workers", 2, "number of queue workers")
 }
@@ -149,9 +149,9 @@ func (c *Config) validate() error {
 		return fmt.Errorf("server.port %d out of range", c.Server.Port)
 	}
 	switch c.Provider.Name {
-	case "gowa", "greenapi", "wwebjs":
+	case "gowa", "greenapi":
 	default:
-		return fmt.Errorf("provider.name %q must be gowa|greenapi|wwebjs", c.Provider.Name)
+		return fmt.Errorf("provider.name %q must be gowa|greenapi", c.Provider.Name)
 	}
 	switch c.Sink.Mode {
 	case "storage-only", "forward-only", "both":

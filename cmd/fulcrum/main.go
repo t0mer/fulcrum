@@ -19,6 +19,7 @@ import (
 	"github.com/t0mer/fulcrum/internal/api"
 	"github.com/t0mer/fulcrum/internal/config"
 	"github.com/t0mer/fulcrum/internal/enroll"
+	"github.com/t0mer/fulcrum/internal/intake"
 	"github.com/t0mer/fulcrum/internal/metrics"
 	"github.com/t0mer/fulcrum/internal/ml"
 	"github.com/t0mer/fulcrum/internal/pipeline"
@@ -175,15 +176,17 @@ func (p *program) daemon(ctx context.Context) error {
 		OnDepth:     func(d int) { m.QueueDepth.Set(float64(d)) },
 	})
 
+	// Single admission path shared by the webhook route and the polling receiver.
+	intakeSvc := intake.New(st, m, pool, cfg.Provider.Name, logger)
+
 	apiSvc := api.New(api.Deps{
 		Store:            st,
 		Enroll:           enrollSvc,
 		Provider:         provider,
 		ProviderName:     cfg.Provider.Name,
-		Notifier:         pool,
+		Intake:           intakeSvc,
 		WebhookSecret:    cfg.Server.WebhookSecret,
 		AuthToken:        cfg.Server.AuthToken,
-		Metrics:          m,
 		Logger:           logger,
 		DefaultThreshold: cfg.Match.DefaultThreshold,
 		DefaultSinkMode:  cfg.Sink.Mode,
@@ -210,6 +213,19 @@ func (p *program) daemon(ctx context.Context) error {
 		pool.Run(ctx)
 		close(poolDone)
 	}()
+
+	// Providers that pull messages themselves (e.g. green-api's bot library)
+	// run a background receive loop instead of an inbound HTTP webhook. It
+	// admits messages through the same intake path as the webhook route and
+	// stops when ctx is cancelled.
+	if rcv, ok := provider.(whatsapp.Receiver); ok {
+		go func() {
+			handle := func(m whatsapp.InboundMessage) { intakeSvc.Accept(ctx, m) }
+			if err := rcv.Receive(ctx, handle); err != nil && ctx.Err() == nil {
+				logger.Error("message receiver stopped", "err", err)
+			}
+		}()
+	}
 
 	errCh := make(chan error, 1)
 	go func() {

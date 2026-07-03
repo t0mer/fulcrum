@@ -35,26 +35,9 @@ func (a *API) webhook(w http.ResponseWriter, r *http.Request) {
 
 	enqueued := 0
 	for _, m := range messages {
-		a.incInbound(m.ProviderGroupID)
-		if !m.IsImage {
-			continue
+		if a.intake.Accept(r.Context(), m) {
+			enqueued++
 		}
-		monitored, err := a.store.IsMonitored(m.ProviderGroupID)
-		if err != nil {
-			a.log.Error("check monitored", "err", err)
-			continue
-		}
-		if !monitored {
-			continue
-		}
-		if _, err := a.store.EnqueueJob(a.provName, m.ProviderGroupID, m.MessageID, m.MediaRef); err != nil {
-			a.log.Error("enqueue job", "err", err)
-			continue
-		}
-		enqueued++
-	}
-	if enqueued > 0 && a.notifier != nil {
-		a.notifier.Notify()
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"enqueued": enqueued})
 }
@@ -69,10 +52,4 @@ func (a *API) verifySecret(r *http.Request) bool {
 	}
 	got := r.Header.Get("X-Webhook-Secret")
 	return subtle.ConstantTimeCompare([]byte(got), []byte(a.secret)) == 1
-}
-
-func (a *API) incInbound(groupID string) {
-	if a.metrics != nil {
-		a.metrics.InboundMessages.WithLabelValues(a.provName, a.store.GroupName(groupID)).Inc()
-	}
 }

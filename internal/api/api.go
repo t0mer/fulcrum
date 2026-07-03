@@ -12,13 +12,10 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/t0mer/fulcrum/internal/enroll"
-	"github.com/t0mer/fulcrum/internal/metrics"
+	"github.com/t0mer/fulcrum/internal/intake"
 	"github.com/t0mer/fulcrum/internal/store"
 	"github.com/t0mer/fulcrum/internal/whatsapp"
 )
-
-// Notifier is woken when new work is enqueued.
-type Notifier interface{ Notify() }
 
 // Deps are the API's collaborators.
 type Deps struct {
@@ -26,10 +23,9 @@ type Deps struct {
 	Enroll        *enroll.Service
 	Provider      whatsapp.Provider
 	ProviderName  string
-	Notifier      Notifier
+	Intake        *intake.Service
 	WebhookSecret string
 	AuthToken     string
-	Metrics       *metrics.Metrics
 	Logger        *slog.Logger
 	// Config fallbacks surfaced by the settings API when no override is stored.
 	DefaultThreshold float64
@@ -45,10 +41,9 @@ type API struct {
 	enroll           *enroll.Service
 	provider         whatsapp.Provider
 	provName         string
-	notifier         Notifier
+	intake           *intake.Service
 	secret           string
 	authToken        string
-	metrics          *metrics.Metrics
 	defaultThreshold float64
 	defaultSinkMode  string
 	matchesPath      string
@@ -67,9 +62,9 @@ func New(d Deps) *API {
 	}
 	return &API{
 		store: d.Store, enroll: d.Enroll, provider: d.Provider,
-		provName: d.ProviderName, notifier: d.Notifier, secret: d.WebhookSecret,
-		authToken: d.AuthToken,
-		metrics:   d.Metrics, defaultThreshold: d.DefaultThreshold, defaultSinkMode: sinkMode,
+		provName: d.ProviderName, intake: d.Intake, secret: d.WebhookSecret,
+		authToken:        d.AuthToken,
+		defaultThreshold: d.DefaultThreshold, defaultSinkMode: sinkMode,
 		matchesPath: d.MatchesPath, log: log,
 	}
 }

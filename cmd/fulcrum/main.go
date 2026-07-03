@@ -208,6 +208,12 @@ func (p *program) daemon(ctx context.Context) error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	// Derive a cancellable context so a server startup/serve failure can stop
+	// the worker pool and receiver before the deferred store Close — otherwise
+	// they keep running against a closed DB (repeated "database is closed").
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	poolDone := make(chan struct{})
 	go func() {
 		pool.Run(ctx)
@@ -236,11 +242,15 @@ func (p *program) daemon(ctx context.Context) error {
 
 	select {
 	case err := <-errCh:
+		// Server failed: stop the workers and receiver, then drain before the
+		// deferred store Close so they don't race a closed DB.
+		cancel()
+		<-poolDone
 		return err
 	case <-ctx.Done():
 		logger.Info("shutting down")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer shutdownCancel()
 		err := srv.Shutdown(shutdownCtx)
 		<-poolDone // wait for workers to finish the in-flight job
 		return err

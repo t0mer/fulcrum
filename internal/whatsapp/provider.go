@@ -44,6 +44,16 @@ type Provider interface {
 	SendImage(ctx context.Context, groupID string, img []byte, mime, caption string) error
 }
 
+// Receiver is an optional capability for providers that pull inbound messages
+// themselves (polling) instead of receiving an HTTP webhook. A provider that
+// implements it is driven by a background receive loop; one that does not is
+// driven by ParseWebhook via the /webhook/{provider} route. See CLAUDE.md §7.
+type Receiver interface {
+	// Receive blocks, delivering each normalized inbound message to handle,
+	// until ctx is cancelled. It returns ctx.Err() on clean shutdown.
+	Receive(ctx context.Context, handle func(InboundMessage)) error
+}
+
 // Config carries the shared connection settings for a provider.
 type Config struct {
 	BaseURL string

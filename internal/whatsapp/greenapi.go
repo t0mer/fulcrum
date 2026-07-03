@@ -109,6 +109,12 @@ func (g *greenapi) ParseWebhook(r *http.Request) ([]InboundMessage, error) {
 // message to handle until ctx is cancelled. This is the default intake path for
 // green-api — no inbound HTTP webhook is required. See CLAUDE.md §7.
 func (g *greenapi) Receive(ctx context.Context, handle func(InboundMessage)) error {
+	// The bot library logs through the std logger with no injectable logger,
+	// leaking message bodies and flooding on auth failure; filter it while the
+	// receiver runs.
+	restoreLog := installBotLogFilter()
+	defer restoreLog()
+
 	id, token := g.creds()
 	bot := chatbot.NewBot(id, token)
 	if g.cfg.BaseURL != "" {

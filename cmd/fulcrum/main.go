@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/kardianos/service"
@@ -110,9 +111,24 @@ func (p *program) Start(service.Service) error {
 	p.done = make(chan struct{})
 	go func() {
 		defer close(p.done)
-		p.err = p.daemon(ctx)
+		if err := p.daemon(ctx); err != nil {
+			p.err = err
+			// Fail-fast: a startup or serve failure must bring the process down
+			// with a non-zero exit rather than idling until an external signal.
+			// service.Run blocks on SIGTERM/Interrupt, so raise one at ourselves;
+			// it then unblocks, Stop returns p.err, and main exits non-zero.
+			stopSelf()
+		}
 	}()
 	return nil
+}
+
+// stopSelf asks the service runner to shut down by delivering the same signal
+// it waits on. Used to fail-fast when the daemon returns an error.
+func stopSelf() {
+	if proc, err := os.FindProcess(os.Getpid()); err == nil {
+		_ = proc.Signal(syscall.SIGTERM)
+	}
 }
 
 func (p *program) Stop(service.Service) error {

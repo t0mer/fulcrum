@@ -30,8 +30,8 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Match.DefaultThreshold != 0.48 {
 		t.Errorf("threshold = %v, want 0.48", cfg.Match.DefaultThreshold)
 	}
-	if cfg.Provider.Name != "gowa" {
-		t.Errorf("provider = %q, want gowa", cfg.Provider.Name)
+	if cfg.Provider.Name != "greenapi" {
+		t.Errorf("provider = %q, want greenapi", cfg.Provider.Name)
 	}
 }
 

@@ -81,7 +81,7 @@ func BindFlags(fs *pflag.FlagSet) {
 	fs.String("config", "", "path to YAML config file")
 	fs.Int("server.port", 8080, "HTTP listen port")
 	fs.String("server.log_level", "info", "log level: debug|info|warning|error")
-	fs.String("provider.name", "gowa", "WhatsApp provider: gowa|greenapi")
+	fs.String("provider.name", "greenapi", "WhatsApp provider: greenapi|gowa")
 	fs.String("ml.url", "http://fulcrum-ml:8081", "fulcrum-ml sidecar base URL")
 	fs.Int("queue.workers", 2, "number of queue workers")
 }
@@ -129,7 +129,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.webhook_secret", "")
 	v.SetDefault("server.auth_token", "")
 	v.SetDefault("db_path", "/data/fulcrum.db")
-	v.SetDefault("provider.name", "gowa")
+	v.SetDefault("provider.name", "greenapi")
 	v.SetDefault("provider.base_url", "")
 	v.SetDefault("provider.token", "")
 	v.SetDefault("ml.url", "http://fulcrum-ml:8081")
@@ -151,7 +151,7 @@ func (c *Config) validate() error {
 	switch c.Provider.Name {
 	case "gowa", "greenapi":
 	default:
-		return fmt.Errorf("provider.name %q must be gowa|greenapi", c.Provider.Name)
+		return fmt.Errorf("provider.name %q must be greenapi|gowa", c.Provider.Name)
 	}
 	switch c.Sink.Mode {
 	case "storage-only", "forward-only", "both":

@@ -19,9 +19,9 @@ server:
   auth_token: ""
 
 provider:
-  name: gowa               # gowa | greenapi
-  base_url: ""
-  token: ""                # set via FULCRUM_PROVIDER_TOKEN
+  name: greenapi           # greenapi | gowa
+  base_url: ""             # green-api cluster URL if the console shows one
+  token: ""                # set via FULCRUM_PROVIDER_TOKEN (green-api: <idInstance>:<apiToken>)
 
 ml:
   url: http://fulcrum-ml:8081

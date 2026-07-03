@@ -126,7 +126,7 @@ variables use the `FULCRUM_` prefix with `.` → `_` (e.g. `server.port` →
 | Log level | `--server.log_level` | `FULCRUM_SERVER_LOG_LEVEL` | `info` |
 | Webhook secret | — | `FULCRUM_SERVER_WEBHOOK_SECRET` | *(empty = open)* |
 | API auth token | — | `FULCRUM_SERVER_AUTH_TOKEN` | *(empty = open)* |
-| Provider | `--provider.name` | `FULCRUM_PROVIDER_NAME` | `gowa` |
+| Provider | `--provider.name` | `FULCRUM_PROVIDER_NAME` | `greenapi` |
 | Provider base URL | — | `FULCRUM_PROVIDER_BASE_URL` | — |
 | Provider token | — | `FULCRUM_PROVIDER_TOKEN` | — |
 | ML sidecar URL | `--ml.url` | `FULCRUM_ML_URL` | `http://fulcrum-ml:8081` |
@@ -152,8 +152,8 @@ Pick one; the pipeline is provider-agnostic.
 
 | Provider | `provider.name` | Notes |
 |---|---|---|
-| [go-whatsapp-web-multidevice](https://github.com/aldinokemal/go-whatsapp-web-multidevice) | `gowa` | **Default.** Native-Go gateway; no third party touches the images. |
-| [green-api](https://green-api.com) | `greenapi` | WhatsApp cloud — routes media through a third party; avoid for children's photos. Token is `<idInstance>:<apiToken>`. Set `provider.base_url` to your cluster URL if the console shows one. |
+| [green-api](https://green-api.com) | `greenapi` | **Default.** WhatsApp cloud; messages are pulled via the bot library (no inbound webhook needed). Token is `<idInstance>:<apiToken>`. Set `provider.base_url` to your cluster URL if the console shows one. Note: media is routed through a third party. |
+| [go-whatsapp-web-multidevice](https://github.com/aldinokemal/go-whatsapp-web-multidevice) | `gowa` | Native-Go gateway; no third party touches the images. |
 
 > Gateway endpoint and webhook field mappings follow each project's own API.
 > Confirm them against the version you deploy.

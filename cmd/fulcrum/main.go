@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/kardianos/service"
@@ -19,6 +20,7 @@ import (
 	"github.com/t0mer/fulcrum/internal/api"
 	"github.com/t0mer/fulcrum/internal/config"
 	"github.com/t0mer/fulcrum/internal/enroll"
+	"github.com/t0mer/fulcrum/internal/intake"
 	"github.com/t0mer/fulcrum/internal/metrics"
 	"github.com/t0mer/fulcrum/internal/ml"
 	"github.com/t0mer/fulcrum/internal/pipeline"
@@ -109,9 +111,24 @@ func (p *program) Start(service.Service) error {
 	p.done = make(chan struct{})
 	go func() {
 		defer close(p.done)
-		p.err = p.daemon(ctx)
+		if err := p.daemon(ctx); err != nil {
+			p.err = err
+			// Fail-fast: a startup or serve failure must bring the process down
+			// with a non-zero exit rather than idling until an external signal.
+			// service.Run blocks on SIGTERM/Interrupt, so raise one at ourselves;
+			// it then unblocks, Stop returns p.err, and main exits non-zero.
+			stopSelf()
+		}
 	}()
 	return nil
+}
+
+// stopSelf asks the service runner to shut down by delivering the same signal
+// it waits on. Used to fail-fast when the daemon returns an error.
+func stopSelf() {
+	if proc, err := os.FindProcess(os.Getpid()); err == nil {
+		_ = proc.Signal(syscall.SIGTERM)
+	}
 }
 
 func (p *program) Stop(service.Service) error {
@@ -175,15 +192,17 @@ func (p *program) daemon(ctx context.Context) error {
 		OnDepth:     func(d int) { m.QueueDepth.Set(float64(d)) },
 	})
 
+	// Single admission path shared by the webhook route and the polling receiver.
+	intakeSvc := intake.New(st, m, pool, cfg.Provider.Name, logger)
+
 	apiSvc := api.New(api.Deps{
 		Store:            st,
 		Enroll:           enrollSvc,
 		Provider:         provider,
 		ProviderName:     cfg.Provider.Name,
-		Notifier:         pool,
+		Intake:           intakeSvc,
 		WebhookSecret:    cfg.Server.WebhookSecret,
 		AuthToken:        cfg.Server.AuthToken,
-		Metrics:          m,
 		Logger:           logger,
 		DefaultThreshold: cfg.Match.DefaultThreshold,
 		DefaultSinkMode:  cfg.Sink.Mode,
@@ -205,11 +224,30 @@ func (p *program) daemon(ctx context.Context) error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	// Derive a cancellable context so a server startup/serve failure can stop
+	// the worker pool and receiver before the deferred store Close — otherwise
+	// they keep running against a closed DB (repeated "database is closed").
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	poolDone := make(chan struct{})
 	go func() {
 		pool.Run(ctx)
 		close(poolDone)
 	}()
+
+	// Providers that pull messages themselves (e.g. green-api's bot library)
+	// run a background receive loop instead of an inbound HTTP webhook. It
+	// admits messages through the same intake path as the webhook route and
+	// stops when ctx is cancelled.
+	if rcv, ok := provider.(whatsapp.Receiver); ok {
+		go func() {
+			handle := func(m whatsapp.InboundMessage) { intakeSvc.Accept(ctx, m) }
+			if err := rcv.Receive(ctx, handle); err != nil && ctx.Err() == nil {
+				logger.Error("message receiver stopped", "err", err)
+			}
+		}()
+	}
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -220,11 +258,15 @@ func (p *program) daemon(ctx context.Context) error {
 
 	select {
 	case err := <-errCh:
+		// Server failed: stop the workers and receiver, then drain before the
+		// deferred store Close so they don't race a closed DB.
+		cancel()
+		<-poolDone
 		return err
 	case <-ctx.Done():
 		logger.Info("shutting down")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer shutdownCancel()
 		err := srv.Shutdown(shutdownCtx)
 		<-poolDone // wait for workers to finish the in-flight job
 		return err

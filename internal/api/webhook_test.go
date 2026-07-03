@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/t0mer/fulcrum/internal/intake"
 	"github.com/t0mer/fulcrum/internal/store"
 	"github.com/t0mer/fulcrum/internal/whatsapp"
 )
@@ -33,7 +34,8 @@ func newWebhookAPI(t *testing.T, secret string) (*API, *store.Store, *fakeNotifi
 	t.Cleanup(func() { st.Close() })
 	prov, _ := whatsapp.New("gowa", whatsapp.Config{})
 	notif := &fakeNotifier{}
-	a := New(Deps{Store: st, Provider: prov, ProviderName: "gowa", Notifier: notif, WebhookSecret: secret})
+	in := intake.New(st, nil, notif, "gowa", nil)
+	a := New(Deps{Store: st, Provider: prov, ProviderName: "gowa", Intake: in, WebhookSecret: secret})
 	return a, st, notif
 }
 

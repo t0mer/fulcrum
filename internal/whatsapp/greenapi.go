@@ -10,9 +10,14 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	chatbot "github.com/green-api/whatsapp-chatbot-golang"
 )
 
 func init() { Register("greenapi", func(c Config) Provider { return &greenapi{cfg: c} }) }
+
+// greenapi receives via the bot library's polling loop, not an HTTP webhook.
+var _ Receiver = (*greenapi)(nil)
 
 // greenapi adapts green-api (a WhatsApp cloud gateway). NOTE: green-api routes
 // media through a third-party cloud — the design advises against it for
@@ -58,17 +63,18 @@ type greenapiWebhook struct {
 	} `json:"messageData"`
 }
 
-func (g *greenapi) ParseWebhook(r *http.Request) ([]InboundMessage, error) {
-	var wh greenapiWebhook
-	if err := json.NewDecoder(io.LimitReader(r.Body, 8<<20)).Decode(&wh); err != nil {
-		return nil, fmt.Errorf("decoding green-api webhook: %w", err)
-	}
+// toMessage normalizes a decoded green-api webhook body. ok is false unless the
+// payload is an incoming message from a group; a group message that isn't an
+// image is still returned (IsImage=false) so intake can count it before
+// dropping it. This is the single parse shared by the HTTP webhook route
+// (ParseWebhook) and the polling receiver (Receive).
+func (wh greenapiWebhook) toMessage() (InboundMessage, bool) {
 	if wh.TypeWebhook != "incomingMessageReceived" {
-		return nil, nil
+		return InboundMessage{}, false
 	}
 	groupID := wh.SenderData.ChatID
 	if !strings.Contains(groupID, "@g.us") {
-		return nil, nil
+		return InboundMessage{}, false
 	}
 	msg := InboundMessage{
 		ProviderGroupID: groupID,
@@ -80,7 +86,64 @@ func (g *greenapi) ParseWebhook(r *http.Request) ([]InboundMessage, error) {
 		msg.Caption = wh.MessageData.FileMessageData.Caption
 		msg.MediaRef = urlRef(wh.MessageData.FileMessageData.DownloadURL)
 	}
+	return msg, true
+}
+
+// ParseWebhook implements the HTTP-webhook path. In production green-api intake
+// runs through Receive (the bot library); this remains a working fallback for
+// the /webhook/greenapi route.
+func (g *greenapi) ParseWebhook(r *http.Request) ([]InboundMessage, error) {
+	var wh greenapiWebhook
+	if err := json.NewDecoder(io.LimitReader(r.Body, 8<<20)).Decode(&wh); err != nil {
+		return nil, fmt.Errorf("decoding green-api webhook: %w", err)
+	}
+	msg, ok := wh.toMessage()
+	if !ok {
+		return nil, nil
+	}
 	return []InboundMessage{msg}, nil
+}
+
+// Receive polls green-api for incoming notifications using the official bot
+// library (ReceiveNotification/DeleteNotification), delivering each normalized
+// message to handle until ctx is cancelled. This is the default intake path for
+// green-api — no inbound HTTP webhook is required. See CLAUDE.md §7.
+func (g *greenapi) Receive(ctx context.Context, handle func(InboundMessage)) error {
+	id, token := g.creds()
+	bot := chatbot.NewBot(id, token)
+	if g.cfg.BaseURL != "" {
+		bot.GreenAPI.APIURL = g.base()
+	}
+	// Keep notifications queued while Fulcrum is down rather than the library
+	// default of flushing them on startup — we must not miss the kids' photos.
+	bot.CleanNotificationQueue = false
+	bot.IncomingMessageHandler(func(n *chatbot.Notification) {
+		if m, ok := fromBody(n.Body); ok {
+			handle(m)
+		}
+	})
+	// StartReceivingNotifications blocks; unblock it on shutdown.
+	go func() {
+		<-ctx.Done()
+		bot.StopReceivingNotifications()
+	}()
+	bot.StartReceivingNotifications()
+	return ctx.Err()
+}
+
+// fromBody converts the bot library's raw notification body (an already-decoded
+// map) into a normalized message by round-tripping it through the same struct
+// the webhook path uses.
+func fromBody(body map[string]interface{}) (InboundMessage, bool) {
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return InboundMessage{}, false
+	}
+	var wh greenapiWebhook
+	if err := json.Unmarshal(raw, &wh); err != nil {
+		return InboundMessage{}, false
+	}
+	return wh.toMessage()
 }
 
 func (g *greenapi) DownloadMedia(ctx context.Context, m InboundMessage) ([]byte, string, error) {

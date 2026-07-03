@@ -105,9 +105,11 @@ docker compose up -d
 Open <http://localhost:8080>, enroll your kids, connect the provider on the
 **Channels** page, and choose which groups to watch.
 
-Configure your gateway to POST inbound events to
-`http://<host>:8080/webhook/<provider>` with the header
-`X-Webhook-Secret: <your secret>`.
+For **webhook-based** providers (`gowa`), configure your gateway to POST inbound
+events to `http://<host>:8080/webhook/<provider>` with the header
+`X-Webhook-Secret: <your secret>`. The **`greenapi`** provider does not use a
+webhook — it pulls messages with the official bot library (see below), so no
+inbound URL is required.
 
 ---
 
@@ -151,10 +153,20 @@ Pick one; the pipeline is provider-agnostic.
 | Provider | `provider.name` | Notes |
 |---|---|---|
 | [go-whatsapp-web-multidevice](https://github.com/aldinokemal/go-whatsapp-web-multidevice) | `gowa` | **Default.** Native-Go gateway; no third party touches the images. |
-| [green-api](https://green-api.com) | `greenapi` | WhatsApp cloud — routes media through a third party; avoid for children's photos. Token is `<idInstance>:<apiToken>`. |
+| [green-api](https://green-api.com) | `greenapi` | WhatsApp cloud — routes media through a third party; avoid for children's photos. Token is `<idInstance>:<apiToken>`. Set `provider.base_url` to your cluster URL if the console shows one. |
 
 > Gateway endpoint and webhook field mappings follow each project's own API.
 > Confirm them against the version you deploy.
+
+**green-api intake (polling, not webhook).** Fulcrum receives green-api messages
+with the [`whatsapp-chatbot-golang`](https://github.com/green-api/whatsapp-chatbot-golang)
+bot library, which long-polls `ReceiveNotification`/`DeleteNotification`. In the
+green-api console the instance must have **incoming notifications enabled** and
+**no outgoing webhook URL set** — green-api delivers to the pull queue *or*
+pushes to a webhook, not both. Notifications queued while Fulcrum is down are
+preserved and processed on restart (the queue is not flushed on startup), so a
+long outage may produce a short backlog burst. `FULCRUM_SERVER_WEBHOOK_SECRET`
+does not apply to green-api in this mode.
 
 ---
 

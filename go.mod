@@ -3,7 +3,7 @@ module github.com/t0mer/fulcrum
 go 1.25.11
 
 require (
-	github.com/go-chi/chi/v5 v5.3.0
+	github.com/go-chi/chi/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/green-api/whatsapp-chatbot-golang v1.0.2
 	github.com/kardianos/service v1.2.4

@@ -20,36 +20,36 @@ cloud ML, pure-Go core, and an ARM-friendly footprint.
 ## Screenshots
 
 ### Registry — the people you're watching for
-![Registry, dark](assets/screenshots/registry-dark.png)
+![Registry, dark](https://raw.githubusercontent.com/t0mer/fulcrum/main/assets/screenshots/registry-dark.png)
 
 Light mode is system-preference aware, with a toggle in the navbar:
 
-![Registry, light](assets/screenshots/registry-light.png)
+![Registry, light](https://raw.githubusercontent.com/t0mer/fulcrum/main/assets/screenshots/registry-light.png)
 
 ### Enrollment — teach it a child's face
 Each child is a dossier: a stable latin *call sign* (used for on-disk folders),
 an optional per-child match threshold, and a set of reference photos. Upload is
 drag-and-drop; when a photo has several faces you pick the right one.
 
-![Subject dossier](assets/screenshots/dossier.png)
+![Subject dossier](https://raw.githubusercontent.com/t0mer/fulcrum/main/assets/screenshots/dossier.png)
 
 ### Channels — choose what to watch
 Toggle which groups are scanned, and pick the single destination group that
 matches are forwarded to.
 
-![Channels](assets/screenshots/channels.png)
+![Channels](https://raw.githubusercontent.com/t0mer/fulcrum/main/assets/screenshots/channels.png)
 
 ### Watch — review the sightings
 Every match, with its similarity score and source group. Confirm a match to
 optionally reinforce recognition, or reject it to delete the stored image.
 
-![Watch log](assets/screenshots/watch.png)
+![Watch log](https://raw.githubusercontent.com/t0mer/fulcrum/main/assets/screenshots/watch.png)
 
 ### Settings — tune matching at runtime
 Adjust the global threshold and delivery mode without a restart; per-subject
 thresholds still win.
 
-![Settings](assets/screenshots/settings.png)
+![Settings](https://raw.githubusercontent.com/t0mer/fulcrum/main/assets/screenshots/settings.png)
 
 ---
 
@@ -188,7 +188,7 @@ does not apply to green-api in this mode.
   never logged.
 
 ### Login (when an auth token is set)
-![Login](assets/screenshots/login.png)
+![Login](https://raw.githubusercontent.com/t0mer/fulcrum/main/assets/screenshots/login.png)
 
 ---
 
